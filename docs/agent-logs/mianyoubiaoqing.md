@@ -61,3 +61,16 @@
 - **验证**：`pnpm install --frozen-lockfile`、`pnpm -r typecheck`、`pnpm -r lint`、`pnpm -r test`（后端 16、前端 31）、`VITE_USE_MOCK=false pnpm --filter frontend build`、生产 Node 服务 4 个页面与 API 404 检查、`docker compose config --quiet`、`node --check tools/container-smoke.mjs`、`git diff --check` 通过。当前 lint 仅后端已声明。
 - **人工审核**：用户已采纳分工与交付方案；代码待 PR 审核。
 - **遗留问题**：本机 Docker Desktop 引擎未就绪，容器构建与持久化检查待 GitHub runner 执行；GHCR 实际发布需合并后验证。业务路由仍在开发，容器验证不代表 M1/M2 功能验收完成。
+
+### LOG-mianyoubiaoqing-20261117-02
+
+- **时间**：2026-11-17 14:00（+08:00）
+- **工具/模型**：Codex / GPT-6
+- **模块 / 分支 / PR**：infra / `codex/chore-infra-cicd` / [#8](https://github.com/Tarnishedtaffy/2026gdufai/pull/8)
+- **任务**：验证 Actions 配置，检查 PR 运行情况，记录远端执行前提。
+- **关键提示词**：延续本次用户要求的 CI/CD PR 与 GHCR 交付方案。
+- **代理做了什么**：推送本人 fork 的功能分支，创建主仓库 PR #8 并请求 `Tarnishedtaffy`、`ONFAIL` 审核；验证 #6/#7 的负责人；在 README 补充私有仓库 fork PR 的 Actions 设置说明。
+- **决策**：主仓库当前为私有仓库，PR 未产生 Actions 检查；当前账号有 write、无 admin 权限，设置读取 API 返回 404，因此是否禁用了 fork PR 工作流需管理员确认，未将推测写成已证实根因。无需向 fork 开放 secrets 或写权限。
+- **验证**：官方 actionlint v1.7.12 压缩包通过 SHA-256 校验，工作流检查通过；`gh pr view` 确认 PR 开放且可合并，reviewer 请求已送达；`gh pr checks` 返回没有检查记录。源码与生产服务验证结果见上一条。
+- **人工审核**：PR 待 reviewer 审核；已向用户说明需要管理员确认的设置。
+- **遗留问题**：本机 Docker 引擎仍未可用，容器构建/持久化与远端 CI 尚未验证，GHCR 实际发布待合并后验证；没有把这些检查标为通过。

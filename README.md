@@ -70,7 +70,8 @@ pnpm dev                    # 后端
 
 发布使用该仓库的 `GITHUB_TOKEN`，只给发布 job `packages: write`；不需要新增 PAT 或 AI 密钥。
 首次发布需仓库允许 Actions 写入 Packages；若同名包已存在，需为本仓库授予该包的 Actions 访问权限。包的可见性由负责人在 GHCR 设置，私有包拉取需先登录。
-建议 reviewer 将 `install / typecheck / lint / test / build` 和 `Docker build / smoke` 设为 main 的必需检查；本 PR 不修改仓库保护规则。
+建议 reviewer 将 `install / typecheck / lint / test / build` 和 `Docker build / smoke` 设为 main 的必需检查；工作流本身不修改仓库保护规则。
+本仓库使用私有仓库 Fork + PR 协作，管理员还需在 Settings → Actions → General 中允许 `Run workflows from fork pull requests`；无需开启向 fork 发送 secrets 或写权限。设置说明见 [GitHub 官方文档](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository#enabling-workflows-for-forks-of-private-repositories)。
 
 发布完成后，在 `.env` 中设置 `IMAGE_NAME=ghcr.io/tarnishedtaffy/2026gdufai:sha-<完整提交 SHA>`，执行：
 
