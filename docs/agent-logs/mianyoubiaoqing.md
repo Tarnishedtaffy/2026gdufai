@@ -92,3 +92,19 @@
 - **验证**：`pnpm -r typecheck`、`pnpm -r lint`、`pnpm -r test`（后端 18、前端 31）、`VITE_USE_MOCK=false pnpm --filter frontend build`、`docker compose config --quiet`、`node --check tools/container-smoke.mjs`、`bash -n tools/repair-volume-permissions.sh`、actionlint v1.7.12、`git diff --check` 均通过。实际 Node 服务的 5 个 HTML 路由与 2 个 Vite 构建资源缓存头通过检查；WSL Ubuntu 的临时 chroot 执行原样权限脚本，离线归档/字节不变/属主与权限修复/node 写入/符号链接保护/root 与目录检查均通过。
 - **人工审核**：用户已授权处理三项建议；新增改动待 PR 复核。
 - **遗留问题**：本地 Node 检查使用现有 Node 24.14.0；固定 Node 22 镜像的实际构建、容器集成及 GHCR 发布仍待验证。本机 Docker 引擎不可用；按用户要求未手动触发远端 CI。
+
+### LOG-mianyoubiaoqing-20261117-04
+
+- **时间**：2026-11-17 21:14（+08:00）
+- **工具/模型**：Codex / GPT-6
+- **模块 / 分支 / PR**：infra / `codex/chore-infra-cicd` / [#8](https://github.com/Tarnishedtaffy/2026gdufai/pull/8)
+- **任务**：负责人开启 fork PR 工作流后验证 CI，重点检查容器构建与保留数据的权限修复。
+- **关键提示词**：用户要求重新触发 PR #8 的 CI，发现问题就修好并推送。
+- **代理做了什么**：
+  - 检查时最新提交 `b4aca9f` 已触发 [CI 44089360555](https://github.com/Tarnishedtaffy/2026gdufai/actions/runs/44089360555)，跟进该运行，源码检查与 Docker build / smoke 全部通过。
+  - 核对容器日志及对应脚本：固定 Node 22.23.5 镜像构建、四个页面、API 404、SQLite 迁移和类别、非 root 运行、旧卷故障后的权限修复、数据保留和上传写入均通过；重建后的容器健康，隔离测试卷正常清理。
+  - 发现 Actions 的 Node 20 弃用警告；对照官方 release、commit SHA 与 action.yml，将 checkout/setup-node/pnpm/artifact/login actions 升级为原生 Node 24 版本，继续固定完整 SHA。应用 Node 版本和发布权限条件不变。
+- **决策**：首轮未发现 Docker 或权限修复失败；处理实际出现的 Action 运行时弃用提示后推送复跑。PR 事件不发布 GHCR，发布 job 跳过符合设计。
+- **验证**：首轮 CI 的源码检查 54 秒、Docker job 63 秒通过；日志包含 `node: v22.23.5`、重建后 `Healthy` 和 `Container smoke passed: frontend, API 404, SQLite, non-root user, repaired persistent volumes.`。Action 元数据已核对均使用 node24、现有输入仍受支持；本地 actionlint 与 diff 检查在提交前执行，升级后的远端结果将在 PR 验证区更新。
+- **人工审核**：用户已授权重跑与修复；PR 仍待 reviewer 复核。
+- **遗留问题**：Action 升级需新提交 CI 再验证；GHCR 的实际推送仍需合入 main 后验证。
