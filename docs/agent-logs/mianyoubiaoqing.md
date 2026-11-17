@@ -42,3 +42,22 @@
 - **验证**：`git diff --check` 通过；全文检索确认当前分工表与日志模板使用新用户名，旧占位仅保留于历史记录；仓库没有 `package.json`，typecheck / lint / test 不适用
 - **人工审核**：用户名由用户明确指定；改动待 PR 审核
 - **遗留问题**：PR 待创建及 reviewer 审核
+
+### LOG-mianyoubiaoqing-20261117-01
+
+- **时间**：2026-11-17 13:45（+08:00）
+- **工具/模型**：Codex / GPT-6
+- **模块 / 分支 / PR**：M1 分工、infra / `codex/chore-infra-cicd` / 待建
+- **任务**：同步最新主仓库，创建 M1 双人分工工单，并通过 PR 完善 CI/CD。
+- **关键提示词**：用户确认按前述双人分工创建主仓库 issue，要求先同步最新提交；要求提交 CI/CD PR，并选择 main 合入后发布 Docker 镜像到 GHCR。
+- **代理做了什么**：
+  - fetch/rebase 到 `f22d134` 后创建功能分支；创建并指派 [#6](https://github.com/Tarnishedtaffy/2026gdufai/issues/6)（本人：识别与抽取）、[#7](https://github.com/Tarnishedtaffy/2026gdufai/issues/7)（`yukacezar569-blip`：批次与反馈追问），补充阶段验收和相互依赖。
+  - 在现有 CI 上增加容器构建、启动/持久化验证、构建产物保存，以及仅主仓库 main push 可执行的 GHCR 发布。
+  - 新增 Dockerfile、Compose、构建上下文排除规则、容器验证脚本；后端通过 `@fastify/static` 托管 Vue 构建与既有页面路由，补充测试；更新 README 和 `.env.example`。
+- **决策**：
+  - 用户已确认 M1 双人分工与 GHCR 交付目标；发布直接复用通过验证的镜像，使用 main/SHA 标签，旧提交重跑不覆盖 main 标签。
+  - 按已采纳架构使用单端口、非 root 容器和 SQLite/上传命名卷；生产构建关闭前端 mock。CI 不调用真实 AI，也不使用真实业务密钥。
+  - 本次共享目录及后端入口改动是用户请求 CI/CD 所需，在 PR 中单列并请 reviewer 与后端负责人审核；业务接口契约不变。
+- **验证**：`pnpm install --frozen-lockfile`、`pnpm -r typecheck`、`pnpm -r lint`、`pnpm -r test`（后端 16、前端 31）、`VITE_USE_MOCK=false pnpm --filter frontend build`、生产 Node 服务 4 个页面与 API 404 检查、`docker compose config --quiet`、`node --check tools/container-smoke.mjs`、`git diff --check` 通过。当前 lint 仅后端已声明。
+- **人工审核**：用户已采纳分工与交付方案；代码待 PR 审核。
+- **遗留问题**：本机 Docker Desktop 引擎未就绪，容器构建与持久化检查待 GitHub runner 执行；GHCR 实际发布需合并后验证。业务路由仍在开发，容器验证不代表 M1/M2 功能验收完成。

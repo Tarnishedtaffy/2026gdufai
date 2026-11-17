@@ -1,0 +1,22 @@
+services:
+  app:
+    image: ${IMAGE_NAME:-gdufai:local}
+    build: .
+    init: true
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_PATH: /app/data/app.db
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - app-data:/app/data
+      - app-uploads:/app/uploads
+
+volumes:
+  app-data:
+  app-uploads:

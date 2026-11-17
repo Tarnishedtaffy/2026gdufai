@@ -31,28 +31,56 @@
 ### Docker（推荐，评审使用）
 
 ```bash
-cp .env.example .env        # 填入 API Key
+cp .env.example .env        # PowerShell: Copy-Item .env.example .env
 docker compose up --build
 # 浏览器打开 http://localhost:3000
 ```
 
 | 项 | 值 |
 |---|---|
-| 端口 | `3000`（待补，以 `docker-compose.yml` 为准） |
-| 数据持久化 | 待补（SQLite 文件与上传目录挂载的卷） |
+| 端口 | 默认 `127.0.0.1:3000`，宿主端口可用 `.env` 中的 `PORT` 调整 |
+| 数据持久化 | Compose 命名卷 `app-data`（SQLite）与 `app-uploads`（上传文件） |
 | 环境变量 | 见 [.env.example](.env.example) |
+
+镜像以非 root 用户运行，由 Fastify 在同一端口托管 Vue 构建产物和 API。
+镜像中的前端固定使用真实 API（`VITE_USE_MOCK=false`）；当前仍为开发骨架，尚未实现的业务接口会返回错误，容器启动通过不代表记账功能已完成。
+数据库与上传目录在容器内固定为 `/app/data/app.db`、`/app/uploads`；`docker compose down` 保留数据，`down --volumes` 会删除数据。
 
 ### 本地开发
 
 ```bash
 pnpm install
 cp .env.example .env
-pnpm dev                    # 待补：以根 package.json scripts 为准
+mkdir backend/data          # 首次运行创建默认数据库目录
+pnpm dev                    # 后端
+# 另一个终端：pnpm dev:frontend
 ```
 
 ### 演示数据
 
 待补：`data/samples/` 下的示例账单 CSV 与导入命令。
+
+### CI/CD
+
+[GitHub Actions](https://github.com/Tarnishedtaffy/2026gdufai/actions/workflows/ci.yml) 对面向 `main` 的 PR 和 `main` 提交执行：
+
+- 冻结锁文件安装、前后端类型检查、已声明的 lint（当前为 backend）、全部 Vitest 测试及前端构建；前端构建产物保存 7 天。
+- Docker 构建与启动，验证首页、Vue 路由、API 404、SQLite 迁移/预设类别、非 root 运行，以及重建容器后数据库和上传卷的持久化。
+- 仅主仓库 `main` 的 push 在两项检查均通过后发布 **同一个已验证镜像**（Linux amd64）到 `ghcr.io/tarnishedtaffy/2026gdufai`，标签为 `main` 和 `sha-<完整提交 SHA>`。PR、fork 和手动检查均不发布；旧提交重跑只发布 SHA 标签。
+
+发布使用该仓库的 `GITHUB_TOKEN`，只给发布 job `packages: write`；不需要新增 PAT 或 AI 密钥。
+首次发布需仓库允许 Actions 写入 Packages；若同名包已存在，需为本仓库授予该包的 Actions 访问权限。包的可见性由负责人在 GHCR 设置，私有包拉取需先登录。
+建议 reviewer 将 `install / typecheck / lint / test / build` 和 `Docker build / smoke` 设为 main 的必需检查；本 PR 不修改仓库保护规则。
+
+发布完成后，在 `.env` 中设置 `IMAGE_NAME=ghcr.io/tarnishedtaffy/2026gdufai:sha-<完整提交 SHA>`，执行：
+
+```bash
+docker compose pull
+docker compose up -d --no-build --wait
+```
+
+`IMAGE_NAME` 只供 Compose 选择镜像。构建阶段不读取 `.env`，运行时才注入配置。
+镜像回滚可切换到之前的 SHA 标签；已有数据库迁移需另外评估兼容性并备份。此流程提供持续交付，服务器部署仍由团队执行。
 
 ## 团队分工
 

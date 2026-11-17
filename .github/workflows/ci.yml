@@ -5,35 +5,37 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
-# 同一分支上来新提交时取消旧的跑批，省 runner 时间
+permissions:
+  contents: read
+
+# PR 新提交取消旧检查；main 的检查和发布串行执行。
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
     name: install / typecheck / lint / test / build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        # 版本取自根 package.json 的 packageManager 字段（pnpm@12.21.0）
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
 
-      # 关键：全新 runner + frozen lockfile，杜绝「我本机是好的」。
-      # 若 pnpm-workspace.yaml 的 allowBuilds 配置错误，这里会直接
-      # ERR_PNPM_IGNORED_BUILDS 失败——CI 的价值就在于抓住这类问题。
       - name: Install
         run: pnpm install --frozen-lockfile
 
@@ -41,10 +43,98 @@ jobs:
         run: pnpm -r typecheck
 
       - name: Lint
+        # 当前只有 backend 声明 lint；新增包的 lint script 会自动纳入。
         run: pnpm -r lint
 
       - name: Test (backend + frontend)
         run: pnpm -r test
 
       - name: Build frontend
+        env:
+          VITE_USE_MOCK: 'false'
         run: pnpm --filter frontend build
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frontend-${{ github.sha }}
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  container:
+    name: Docker build / smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      IMAGE_NAME: gdufai:ci
+      COMPOSE_PROJECT_NAME: gdufai-ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Build and start
+        run: docker compose up --build -d --wait --wait-timeout 120
+      - name: Verify frontend, SQLite and persistent volumes
+        run: node tools/container-smoke.mjs
+      - name: Save tested image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'Tarnishedtaffy/2026gdufai'
+        run: docker save "$IMAGE_NAME" -o "$RUNNER_TEMP/image.tar"
+      - name: Upload tested image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'Tarnishedtaffy/2026gdufai'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tested-container
+          path: ${{ runner.temp }}/image.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Cleanup isolated CI project
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  publish:
+    name: Publish tested image to GHCR
+    needs: [verify, container]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'Tarnishedtaffy/2026gdufai'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download tested image
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: tested-container
+          path: ${{ runner.temp }}
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the same image that passed smoke tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker load -i "$RUNNER_TEMP/image.tar"
+          docker tag gdufai:ci "$image:sha-$GITHUB_SHA"
+          docker push "$image:sha-$GITHUB_SHA"
+          printf 'Published `%s:sha-%s`\n' "$image" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          # 旧提交的重跑只发布 SHA 标签，避免覆盖当前 main 镜像。
+          head_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [[ "$head_sha" == "$GITHUB_SHA" ]]; then
+            docker tag gdufai:ci "$image:main"
+            docker push "$image:main"
+            printf 'Updated `%s:main`\n' "$image" >> "$GITHUB_STEP_SUMMARY"
+          fi
