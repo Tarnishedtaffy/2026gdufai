@@ -1,0 +1,674 @@
+{
+  "testedAt": "2026-11-17T16:37:50.665Z",
+  "base": "c47e0942f329c63573eeaa5eb0f8d083d91209f0",
+  "m2PullRequest": 9,
+  "m2Commit": "c28801929b52f86e744ee7a4f748f2febb7953d5",
+  "execution": "Fastify app.inject + SQLite :memory:, no stub responses",
+  "summary": {
+    "scenarios": 11,
+    "passed": 11,
+    "failed": 0,
+    "contractM1Checklist": 8,
+    "extensions": 3
+  },
+  "limitations": [
+    "PR #9 is not merged",
+    "No production UI, authentication, OCR, ASR or upload verification"
+  ],
+  "observations": [
+    "C08 includes an M1 prevention check and a deliberately malformed direct M2 request because a missing sentAt cannot pass M1 validation.",
+    "C05 discards the first real M2 success response to model response loss; the retry reaches real M2 idempotency logic.",
+    "M2 returns DUPLICATE_RECORD severity warning, whereas contract §1.5 lists blocking. M1 preserves the response and uses duplicate status as success."
+  ],
+  "cases": [
+    {
+      "id": "C01",
+      "name": "完整记录：确认后真实入库",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C01-002",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 32.5,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C01-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C01:r_C01-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C01-002\",\"results\":[{\"recordId\":\"r_C01-001\",\"status\":\"confirmed\",\"transactionId\":\"tx_f83a67ab-23ba-43df-815a-4218c1ba00d8\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[]}]}"
+        }
+      ],
+      "m1ImportCalls": 1
+    },
+    {
+      "id": "C02",
+      "name": "缺金额后补发",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C02-002",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": null,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C02-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C02:r_C02-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C02-002\",\"results\":[{\"recordId\":\"r_C02-001\",\"status\":\"pending_followup\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":\"amount\",\"code\":\"MISSING_AMOUNT\",\"severity\":\"blocking\"}]}]}"
+        },
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C02-003",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 18.75,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C02-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C02:r_C02-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C02-003\",\"results\":[{\"recordId\":\"r_C02-001\",\"status\":\"confirmed\",\"transactionId\":\"tx_086184e7-78a9-4465-90ca-399085478b21\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[]}]}"
+        }
+      ],
+      "m1ImportCalls": 2
+    },
+    {
+      "id": "C03",
+      "name": "缺时间两轮不补",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C03-002",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 32.5,
+                "merchant": "虚构咖啡店",
+                "occurredAt": null,
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C03-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C03:r_C03-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C03-002\",\"results\":[{\"recordId\":\"r_C03-001\",\"status\":\"pending_followup\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":null,\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":\"occurredAt\",\"code\":\"MISSING_TIME\",\"severity\":\"blocking\"}]}]}"
+        },
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C03-003",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 32.5,
+                "merchant": "虚构咖啡店",
+                "occurredAt": null,
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C03-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C03:r_C03-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C03-003\",\"results\":[{\"recordId\":\"r_C03-001\",\"status\":\"confirmed\",\"transactionId\":\"tx_9c6f9a52-3044-4ab9-a137-cf5d8f75a8bd\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-15T21:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[{\"field\":\"occurredAt\",\"code\":\"TIME_DEFAULTED_TO_CHAT_TIME\",\"severity\":\"warning\"}]}]}"
+        }
+      ],
+      "m1ImportCalls": 2
+    },
+    {
+      "id": "C04",
+      "name": "未来时间两轮不补",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C04-002",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 32.5,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2099-01-01T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C04-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C04:r_C04-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C04-002\",\"results\":[{\"recordId\":\"r_C04-001\",\"status\":\"pending_followup\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":\"2099-01-01T12:00:00+08:00\",\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":\"occurredAt\",\"code\":\"FUTURE_TIME\",\"severity\":\"blocking\"}]}]}"
+        },
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C04-003",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 32.5,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2099-01-01T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C04-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C04:r_C04-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C04-003\",\"results\":[{\"recordId\":\"r_C04-001\",\"status\":\"confirmed\",\"transactionId\":\"tx_fd0d4263-8ed1-419a-986f-b9da2ec42642\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-15T21:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[{\"field\":\"occurredAt\",\"code\":\"TIME_DEFAULTED_TO_CHAT_TIME\",\"severity\":\"warning\"}]}]}"
+        }
+      ],
+      "m1ImportCalls": 2
+    },
+    {
+      "id": "C05",
+      "name": "真实入库后回执丢失，再发同一批次",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C05-002",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 32.5,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C05-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C05:r_C05-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C05-002\",\"results\":[{\"recordId\":\"r_C05-001\",\"status\":\"confirmed\",\"transactionId\":\"tx_656b7a0a-1358-4b26-bea3-61f013bb35aa\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[]}]}"
+        },
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C05-002",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 32.5,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C05-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C05:r_C05-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C05-002\",\"results\":[{\"recordId\":\"r_C05-001\",\"status\":\"duplicate\",\"transactionId\":\"tx_656b7a0a-1358-4b26-bea3-61f013bb35aa\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":null,\"feedback\":[{\"field\":null,\"code\":\"DUPLICATE_RECORD\",\"severity\":\"warning\"}]}]}"
+        }
+      ],
+      "m1ImportCalls": 2
+    },
+    {
+      "id": "C06",
+      "name": "方向与类别冲突",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C06-002",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 8000,
+                "merchant": "虚构用工方",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": "expense",
+                "confidence": 0.9,
+                "rawText": "虚构工资到账 8000 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C06-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C06:r_C06-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C06-002\",\"results\":[{\"recordId\":\"r_C06-001\",\"status\":\"pending_followup\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":\"direction\",\"code\":\"CATEGORY_KIND_MISMATCH\",\"severity\":\"blocking\"}]}]}"
+        },
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C06-003",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 8000,
+                "merchant": "虚构用工方",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": "expense",
+                "confidence": 0.9,
+                "rawText": "虚构工资到账 8000 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C06-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C06:r_C06-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C06-003\",\"results\":[{\"recordId\":\"r_C06-001\",\"status\":\"confirmed\",\"transactionId\":\"tx_f239f7be-ecde-4b50-8e49-ab43c233f2bf\",\"direction\":\"income\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":9,\"name\":\"工资\",\"kind\":\"income\"},\"confidence\":0.9,\"feedback\":[{\"field\":\"direction\",\"code\":\"DIRECTION_FORCED_BY_CATEGORY\",\"severity\":\"warning\"}]}]}"
+        }
+      ],
+      "m1ImportCalls": 2
+    },
+    {
+      "id": "C07",
+      "name": "退款不生成账单",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_C07-002",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 299,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构买鞋退款 299 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C07-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C07:r_C07-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_C07-002\",\"results\":[{\"recordId\":\"r_C07-001\",\"status\":\"rejected\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":null,\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":\"rawText\",\"code\":\"REFUND_NOT_SUPPORTED\",\"severity\":\"blocking\"}]}]}"
+        }
+      ],
+      "m1ImportCalls": 1
+    },
+    {
+      "id": "C08",
+      "name": "缺 sentAt 的双边界校验",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "Deliberately invalid direct M2 request; M1 prevented it",
+          "request": {
+            "version": 1,
+            "batchId": "b_C08_invalid",
+            "records": [
+              {
+                "amount": 32.5,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_C08-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_C08:r_C08-001"
+              }
+            ]
+          },
+          "statusCode": 400,
+          "rawResponse": "{\"error\":{\"code\":\"INVALID_BATCH\",\"message\":\"sentAt 必填且必须带时区（ISO-8601）\",\"field\":\"sentAt\"}}"
+        }
+      ],
+      "m1ImportCalls": 0
+    },
+    {
+      "id": "E01",
+      "name": "三轮仍缺金额后终止",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_E01-002",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": null,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_E01-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E01:r_E01-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_E01-002\",\"results\":[{\"recordId\":\"r_E01-001\",\"status\":\"pending_followup\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":\"amount\",\"code\":\"MISSING_AMOUNT\",\"severity\":\"blocking\"}]}]}"
+        },
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_E01-003",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": null,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_E01-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E01:r_E01-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_E01-003\",\"results\":[{\"recordId\":\"r_E01-001\",\"status\":\"pending_followup\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":\"amount\",\"code\":\"MISSING_AMOUNT\",\"severity\":\"blocking\"}]}]}"
+        },
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_E01-004",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": null,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_E01-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E01:r_E01-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_E01-004\",\"results\":[{\"recordId\":\"r_E01-001\",\"status\":\"rejected\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":null,\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":\"amount\",\"code\":\"MISSING_AMOUNT\",\"severity\":\"blocking\"}]}]}"
+        },
+        {
+          "purpose": "Direct replay verifies terminal M2 rejection",
+          "request": {
+            "version": 1,
+            "batchId": "b_E01-004",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": null,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_E01-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E01:r_E01-001"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_E01-004\",\"results\":[{\"recordId\":\"r_E01-001\",\"status\":\"rejected\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":null,\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":null,\"code\":\"MISSING_AMOUNT\",\"severity\":\"blocking\"}]}]}"
+        }
+      ],
+      "m1ImportCalls": 3
+    },
+    {
+      "id": "E02",
+      "name": "批次部分成功后只补发待追问项",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_E02-003",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 12.25,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_E02-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E02:r_E02-001"
+              },
+              {
+                "amount": null,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构公交支出",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_E02-002",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E02:r_E02-002"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_E02-003\",\"results\":[{\"recordId\":\"r_E02-001\",\"status\":\"confirmed\",\"transactionId\":\"tx_283c9660-fc6e-473f-9269-17928f421403\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[]},{\"recordId\":\"r_E02-002\",\"status\":\"pending_followup\",\"transactionId\":null,\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":null,\"confidence\":null,\"feedback\":[{\"field\":\"amount\",\"code\":\"MISSING_AMOUNT\",\"severity\":\"blocking\"}]}]}"
+        },
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_E02-004",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 2,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构公交支出",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_E02-002",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E02:r_E02-002"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_E02-004\",\"results\":[{\"recordId\":\"r_E02-002\",\"status\":\"confirmed\",\"transactionId\":\"tx_e7e7838d-dfa4-4606-8a96-8bdd41a99e6e\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[]}]}"
+        }
+      ],
+      "m1ImportCalls": 2
+    },
+    {
+      "id": "E03",
+      "name": "文字/语音/图片草稿统一确认提交",
+      "passed": true,
+      "requests": [
+        {
+          "purpose": "M1 explicit submit",
+          "request": {
+            "version": 1,
+            "batchId": "b_E03-004",
+            "sentAt": "2026-11-15T21:00:00+08:00",
+            "records": [
+              {
+                "amount": 11,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "text",
+                "sourceRef": null,
+                "recordId": "r_E03-001",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E03:r_E03-001"
+              },
+              {
+                "amount": 12,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "voice",
+                "sourceRef": "uploads/demo/fictitious-voice.wav",
+                "recordId": "r_E03-002",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E03:r_E03-002"
+              },
+              {
+                "amount": 13,
+                "merchant": "虚构咖啡店",
+                "occurredAt": "2026-11-14T12:00:00+08:00",
+                "direction": null,
+                "confidence": 0.9,
+                "rawText": "虚构午餐咖啡 32.5 元",
+                "modality": "image",
+                "sourceRef": "uploads/demo/fictitious-receipt.jpg",
+                "recordId": "r_E03-003",
+                "userId": "u_integration_demo",
+                "chatAt": null,
+                "idempotencyKey": "session_E03:r_E03-003"
+              }
+            ]
+          },
+          "statusCode": 201,
+          "rawResponse": "{\"batchId\":\"b_E03-004\",\"results\":[{\"recordId\":\"r_E03-001\",\"status\":\"confirmed\",\"transactionId\":\"tx_9336c18f-afab-41a7-af9f-711d119e6617\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[]},{\"recordId\":\"r_E03-002\",\"status\":\"confirmed\",\"transactionId\":\"tx_39772b54-317b-4bad-9a46-4ee9e2e50729\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[]},{\"recordId\":\"r_E03-003\",\"status\":\"confirmed\",\"transactionId\":\"tx_2ed0afb6-7109-4983-9217-0265db4095bf\",\"direction\":\"expense\",\"occurredAt\":\"2026-11-14T12:00:00+08:00\",\"category\":{\"id\":1,\"name\":\"餐饮\",\"kind\":\"expense\"},\"confidence\":0.9,\"feedback\":[]}]}"
+        }
+      ],
+      "m1ImportCalls": 1
+    }
+  ]
+}
