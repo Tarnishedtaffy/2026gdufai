@@ -43,8 +43,36 @@ docker compose up --build
 | 环境变量 | 见 [.env.example](.env.example) |
 
 镜像以非 root 用户运行，由 Fastify 在同一端口托管 Vue 构建产物和 API。
+构建和运行固定使用 `node:22.23.5-bookworm-slim` 及 Dockerfile 中的 digest，CI 使用 `.node-version` 中的同一版本；升级时同步更新这两处并重新验证。该标签已对照 [Docker 官方镜像清单](https://github.com/docker-library/official-images/blob/master/library/node) 和 registry manifest 核实。
+`assets/` 中符合 Vite 默认八位 hash 命名的资源使用一年 immutable 缓存；所有 HTML（含 Vue 页面回退）及未版本化文件使用 `no-cache`，浏览器通过 ETag 重新验证。
 镜像中的前端固定使用真实 API（`VITE_USE_MOCK=false`）；当前仍为开发骨架，尚未实现的业务接口会返回错误，容器启动通过不代表记账功能已完成。
 数据库与上传目录在容器内固定为 `/app/data/app.db`、`/app/uploads`；`docker compose down` 保留数据，`down --volumes` 会删除数据。
+
+#### 已有数据卷出现权限错误
+
+镜像构建时的 `chown` 不会修复已经存在的命名卷。遇到 `EACCES` 或 SQLite 无法写入时，在原部署目录、使用原 Compose project 和镜像执行下面的维护流程。先停止所有写入这两个卷的服务；任何一步失败都先停止排查，备份未成功落盘前不要修改权限。
+
+下面的备份目录和临时容器名称仅为示例，每次改用新的唯一名称；不要覆盖历史备份。离线归档同时保存整个 data 目录（含 SQLite WAL/SHM）和上传目录。
+首次使用时先执行 `mkdir backups` 创建父目录；父目录已存在则跳过。
+
+```bash
+docker compose stop app
+mkdir backups/permission-repair-20261117-01
+docker compose run --name gdufai-backup-20261117-01 --no-deps --user 0:0 --entrypoint sh app -c 'tar -cpf /tmp/gdufai-volumes.tar -C /app data uploads'
+docker cp gdufai-backup-20261117-01:/tmp/gdufai-volumes.tar ./backups/permission-repair-20261117-01/volumes.tar
+tar -tf ./backups/permission-repair-20261117-01/volumes.tar
+```
+
+确认宿主机备份可以列出内容后，再运行修复并重新启动：
+
+```bash
+docker compose run --rm --no-deps --user 0:0 --entrypoint repair-volume-permissions app
+docker compose up -d --no-build --wait
+docker compose exec app id
+```
+
+修复脚本只调整两个现有卷中的属主以及属主的读写/目录进入权限，不跟随符号链接，不清空数据，也不使用 `chmod 777`。维护容器临时使用 root；正常应用仍以 `node` 用户运行。确认历史账单和上传文件可读后，可以用 `docker rm gdufai-backup-20261117-01` 删除备份临时容器，保留宿主机归档。
+如果应用仍报错，保留卷、归档和临时容器继续排查；不要用 `down --volumes` 修复权限。宿主机 `backups/` 已排除出 Git 和 Docker 构建上下文。
 
 ### 本地开发
 

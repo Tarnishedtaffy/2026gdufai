@@ -74,3 +74,21 @@
 - **验证**：官方 actionlint v1.7.12 压缩包通过 SHA-256 校验，工作流检查通过；`gh pr view` 确认 PR 开放且可合并，reviewer 请求已送达；`gh pr checks` 返回没有检查记录。源码与生产服务验证结果见上一条。
 - **人工审核**：PR 待 reviewer 审核；已向用户说明需要管理员确认的设置。
 - **遗留问题**：本机 Docker 引擎仍未可用，容器构建/持久化与远端 CI 尚未验证，GHCR 实际发布待合并后验证；没有把这些检查标为通过。
+
+### LOG-mianyoubiaoqing-20261117-03
+
+- **时间**：2026-11-17 21:02（+08:00）
+- **工具/模型**：Codex / GPT-6
+- **模块 / 分支 / PR**：infra、前端托管 / `codex/chore-infra-cicd` / [#8](https://github.com/Tarnishedtaffy/2026gdufai/pull/8)
+- **任务**：处理评审中的 Node 镜像固定、已有数据卷权限、静态资源缓存三项非阻塞建议。
+- **关键提示词**：用户要求按代理判断处理三项建议，数据卷必须保留数据；先完成本地验证并更新 PR，远端 CI 等负责人开启后再运行。
+- **代理做了什么**：
+  - 同步上游后，将构建/运行镜像固定为 `node:22.23.5-bookworm-slim` 及 manifest digest；新增 `.node-version`，两个 CI job 读取同一版本。
+  - 新增仅手动执行的 `repair-volume-permissions` 维护命令；README 给出停服、离线备份到宿主机、检查归档、修复现有卷、以 node 用户重启的流程，备份目录排除出 Git 和构建上下文。
+  - 对 Vite hash 资源设置一年 immutable 缓存，HTML 与未版本化文件使用 no-cache；增加缓存/条件请求测试，并在容器冒烟中加入旧卷属主和权限异常的修复回归。
+- **决策**：
+  - 对照 Docker 官方清单及 registry manifest 核实 22.23.5 标签、digest 和 Linux amd64 平台，使用该精确补丁版本，避免宽泛主版本标签漂移。
+  - 权限修复不删除卷或文件、不跟随符号链接、不开放组/其他用户权限；维护命令要求 root 且先检查两个目录，正常服务仍以 node 用户运行。真实卷未被操作。
+- **验证**：`pnpm -r typecheck`、`pnpm -r lint`、`pnpm -r test`（后端 18、前端 31）、`VITE_USE_MOCK=false pnpm --filter frontend build`、`docker compose config --quiet`、`node --check tools/container-smoke.mjs`、`bash -n tools/repair-volume-permissions.sh`、actionlint v1.7.12、`git diff --check` 均通过。实际 Node 服务的 5 个 HTML 路由与 2 个 Vite 构建资源缓存头通过检查；WSL Ubuntu 的临时 chroot 执行原样权限脚本，离线归档/字节不变/属主与权限修复/node 写入/符号链接保护/root 与目录检查均通过。
+- **人工审核**：用户已授权处理三项建议；新增改动待 PR 复核。
+- **遗留问题**：本地 Node 检查使用现有 Node 24.14.0；固定 Node 22 镜像的实际构建、容器集成及 GHCR 发布仍待验证。本机 Docker 引擎不可用；按用户要求未手动触发远端 CI。

@@ -29,15 +29,22 @@ compose('exec', '-T', 'app', 'node', '--input-type=module', '-e', `
   db.close();
   writeFileSync(process.env.UPLOAD_DIR + '/ci-probe.txt', 'persisted');
 `);
+// 模拟旧卷为 root 所有且 node 不可写；只操作本脚本限定的隔离 CI project。
+compose('stop', 'app');
+compose('run', '--rm', '--no-deps', '--user', '0:0', '--entrypoint', 'sh', 'app', '-c',
+  'chown -hR root:root /app/data /app/uploads && chmod 500 /app/data /app/uploads && chmod 000 /app/data/app.db /app/uploads/ci-probe.txt');
+compose('run', '--rm', '--no-deps', '--user', '0:0', '--entrypoint', 'repair-volume-permissions', 'app');
 compose('up', '-d', '--no-build', '--force-recreate', '--wait', '--wait-timeout', '120');
 compose('exec', '-T', 'app', 'node', '--input-type=module', '-e', `
   import assert from 'node:assert/strict';
   import Database from 'better-sqlite3';
-  import { readFileSync } from 'node:fs';
+  import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
   const db = new Database(process.env.DATABASE_PATH);
   assert.equal(db.prepare('SELECT value FROM ci_probe').get().value, 'persisted');
   db.exec('DROP TABLE ci_probe');
   db.close();
   assert.equal(readFileSync(process.env.UPLOAD_DIR + '/ci-probe.txt', 'utf8'), 'persisted');
+  appendFileSync(process.env.UPLOAD_DIR + '/ci-probe.txt', '-writable');
+  writeFileSync(process.env.UPLOAD_DIR + '/ci-new.txt', 'new upload');
 `);
-console.log('Container smoke passed: frontend, API 404, SQLite, non-root user, persistent volumes.');
+console.log('Container smoke passed: frontend, API 404, SQLite, non-root user, repaired persistent volumes.');

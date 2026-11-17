@@ -19,6 +19,7 @@ coverage/
 data/*.db
 uploads/
 backend/uploads/
+backups/
 
 # 日志
 *.log

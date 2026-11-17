@@ -10,6 +10,7 @@
 **/*.log
 **/uploads
 data
+backups
 docs
 frontend-static
 *.zip
