@@ -4,6 +4,7 @@ import type { CaptureDraft } from '../../../backend/src/modules/capture/index.ts
 import { useCaptureFlow } from '../composables/useCaptureFlow';
 import { isMockEnabled } from '../api/request';
 import { normalizeIsoOffset } from '../utils/datetime';
+import { modalityFromMimeType } from '../utils/attachment';
 import { yuanToCents, centsToYuanNumber } from '../utils/money';
 import CaptureDraftCard from '../components/capture/CaptureDraftCard.vue';
 
@@ -14,12 +15,22 @@ const amountInput = ref('');
 const merchantInput = ref('');
 const occurredAtInput = ref('');
 const direction = ref<CaptureDraft['direction']>(null);
+const modality = ref<CaptureDraft['modality']>('text');
+const sourceRef = ref<string | null>(null);
 const formError = ref<string | null>(null);
 const invalidRows = ref<Record<string, string>>({});
 const busy = computed(() => snapshot.value.phase === 'submitting');
 const retrying = computed(() => snapshot.value.phase === 'retry');
 const pendingCount = computed(() => snapshot.value.records.filter(row => !row.result || row.result.status === 'pending_followup').length);
 const isMock = isMockEnabled();
+
+/** 附件入口只记录文件名与模态；识别能力尚未接入，不读取文件内容。 */
+function handleFileSelect(event: Event): void {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  sourceRef.value = file.name;
+  modality.value = modalityFromMimeType(file.type);
+}
 
 /** 手工录入只生成待确认草稿；金额不静默舍入，未知时间不补为当前时间。 */
 function prepareManual(): void {
@@ -36,7 +47,7 @@ function prepareManual(): void {
   acceptDrafts([{
     amount: centsToYuanNumber(cents), merchant: merchantInput.value.trim() || null,
     occurredAt, direction: direction.value, confidence: null,
-    rawText: rawText.value, modality: 'text', sourceRef: null,
+    rawText: rawText.value, modality: modality.value, sourceRef: sourceRef.value,
   }]);
 }
 
@@ -64,6 +75,7 @@ function edit(recordId: string, patch: Partial<CaptureDraft> | null, error: stri
 function newEntry(): void {
   showEntry.value = true;
   rawText.value = ''; amountInput.value = ''; merchantInput.value = ''; occurredAtInput.value = ''; direction.value = null;
+  modality.value = 'text'; sourceRef.value = null;
   formError.value = null; invalidRows.value = {};
 }
 
@@ -77,13 +89,14 @@ defineExpose({ acceptDrafts });
     <p v-if="!canPrepare" class="alert" role="alert">真实记账尚未接入登录会话，暂不能提交。</p>
     <form v-if="showEntry" class="entry" @submit.prevent="prepareManual">
       <h2>准备文字草稿</h2>
-      <p class="hint">可先手工填写或载入虚构示例；图片、语音识别正在接入。</p>
+      <p class="hint">可先手工填写或载入虚构示例；小票图片与语音识别尚未接入，选择附件后只会记录文件名。</p>
       <label for="cap-raw">原始文本<input id="cap-raw" v-model="rawText" placeholder="例如：午饭麻辣烫 24.5 元" /></label>
       <div class="fields">
         <label for="cap-dir">收支方向<select id="cap-dir" v-model="direction"><option :value="null">未知</option><option value="expense">支出</option><option value="income">收入</option></select></label>
         <label for="cap-amount">金额（元，未知留空）<input id="cap-amount" v-model="amountInput" inputmode="decimal" /></label>
         <label for="cap-merchant">商户（未知留空）<input id="cap-merchant" v-model="merchantInput" /></label>
         <label for="cap-time">发生时间（北京时间，未知留空）<input id="cap-time" v-model="occurredAtInput" type="datetime-local" /></label>
+        <label for="cap-file">附件小票或语音（可选）<input id="cap-file" type="file" accept="image/*,audio/*" @change="handleFileSelect" /><span class="hint">{{ sourceRef ?? '未选择文件' }}</span></label>
       </div>
       <p v-if="formError" class="alert" role="alert">{{ formError }}</p>
       <div class="actions"><button type="submit" class="primary" :disabled="!canPrepare">生成待确认草稿</button><button type="button" :disabled="!canPrepare" @click="prepareSamples">载入两条虚构示例</button></div>

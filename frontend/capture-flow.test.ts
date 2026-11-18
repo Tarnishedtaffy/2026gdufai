@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createCaptureFlow } from './src/composables/useCaptureFlow';
 import { mockImportBatch } from './src/mock/import';
 import { parseCaptureEdit } from './src/components/capture/capture-form';
+import { modalityFromMimeType } from './src/utils/attachment';
 import type { CaptureDraft, ImportBatch, ImportRecord } from '../backend/src/modules/capture/index.ts';
 
 const sentAt = '2026-11-17T19:00:00+08:00';
@@ -145,5 +146,18 @@ describe('M1 确认界面流程适配', () => {
     await flow.confirm();
     expect(flow.snapshot.value.records[0]?.result?.status).toBe('confirmed');
     expect(flow.snapshot.value.records[0]?.record.idempotencyKey).toBe(pending.record.idempotencyKey);
+  });
+});
+
+// ---------- 附件模态 ----------
+describe('附件模态推断', () => {
+  it('音频按 voice 处理', () => {
+    expect(modalityFromMimeType('audio/mpeg')).toBe('voice');
+    expect(modalityFromMimeType('audio/webm')).toBe('voice');
+  });
+
+  it('图片与其他类型按 image 处理', () => {
+    expect(modalityFromMimeType('image/png')).toBe('image');
+    expect(modalityFromMimeType('application/pdf')).toBe('image');
   });
 });
