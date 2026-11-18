@@ -11,6 +11,7 @@ RUN npm install --global "$(node -p 'require("./package.json").packageManager')"
 
 FROM base AS build
 RUN pnpm install --frozen-lockfile
+COPY backend/src/modules/capture/ ./backend/src/modules/capture/
 COPY frontend/ ./frontend/
 RUN VITE_USE_MOCK=false pnpm --filter frontend build
 
