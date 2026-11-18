@@ -63,6 +63,8 @@ flowchart LR
 ├── frontend/
 │   ├── package.json
 │   └── src/{views,components,api,stores}/
+├── packages/
+│   └── capture-flow/              # M1 确认/重试纯流程，前后端共用的 workspace 包
 ├── data/
 │   └── samples/                   # 演示账单 CSV、示例小票图片（虚构数据）
 └── docs/
@@ -74,6 +76,8 @@ flowchart LR
 ```
 
 每个 `modules/<name>/` 内部建议分层：`routes.ts`（HTTP）→ `service.ts`（业务）→ `repository.ts`（SQL），`types.ts` 放对外类型，`index.ts` 只导出供其他模块调用的服务函数。
+
+`@gduf/capture-flow` 只保存字段草稿、组装批次、关联回执和保留安全重试状态；通过依赖注入调用 M2，不依赖 Node、数据库或前端框架。前端引用包的公共入口，后端 `capture/index.ts` 保留兼容导出；识别服务仍放在后端，分类、去重、追问轮次仍由 M2 负责。
 
 ## 3. 模块边界
 

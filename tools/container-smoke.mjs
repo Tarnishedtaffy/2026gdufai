@@ -21,6 +21,8 @@ compose('exec', '-T', 'app', 'node', '--input-type=module', '-e', `
   import assert from 'node:assert/strict';
   import Database from 'better-sqlite3';
   import { writeFileSync } from 'node:fs';
+  import { createCaptureSession } from '@gduf/capture-flow';
+  assert.equal(typeof createCaptureSession, 'function');
   assert.notEqual(process.getuid(), 0);
   const db = new Database(process.env.DATABASE_PATH);
   assert.ok(db.pragma('user_version', { simple: true }) >= 1);

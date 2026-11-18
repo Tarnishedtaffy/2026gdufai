@@ -1,4 +1,4 @@
-/** M1 内部接入提案，供识别与前端同学确认；外部请求遵循契约 v1.1。 */
+/** M1 内部接入提案，供识别与前端同学确认；外部请求遵循契约 v1.2。 */
 export interface CaptureDraft {
   amount: number | null;
   merchant: string | null;
@@ -39,6 +39,7 @@ export interface CaptureFeedback {
   field: string | null;
   code: string;
   severity: 'blocking' | 'warning';
+  candidates?: { id: number; name: string }[];
 }
 
 /** 契约 1.4 的处理结果；未知响应在进入流程前做运行时检查。 */

@@ -1,4 +1,5 @@
 import type { ApiErrorBody, HttpErrorCode } from '../types/contract';
+import { getAccessToken } from './access-token';
 
 export type ClientErrorCode = HttpErrorCode | 'NETWORK';
 
@@ -53,14 +54,15 @@ export interface RequestConfig extends RequestInit {
 export async function request<T>(path: string, config: RequestConfig = {}): Promise<T> {
   const { expectArray = false, ...init } = config;
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const token = getAccessToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
       ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init.headers ?? {}),
-      },
+      headers,
     });
   } catch {
     throw createApiError('NETWORK', '网络连接失败，请稍后重试');

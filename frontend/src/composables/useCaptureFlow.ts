@@ -1,7 +1,7 @@
 import { computed, inject, shallowRef, type InjectionKey } from 'vue';
-import { createCaptureSession, type CaptureContext, type CaptureDependencies, type CaptureDraft } from '../../../backend/src/modules/capture/index.ts';
+import { createCaptureSession, type CaptureContext, type CaptureDependencies, type CaptureDraft } from '@gduf/capture-flow';
 import { importBatch } from '../api/index';
-import { isMockEnabled } from '../api/request';
+import { getDemoUserId, isMockEnabled } from '../api/request';
 import { nowIso } from '../utils/datetime';
 
 /** 由已验证的会话提供身份；不得把模型输出或表单字段作为身份来源。 */
@@ -26,7 +26,7 @@ export function createCaptureFlow(deps: CaptureUiDependencies) {
     if (contextProvider.value) return contextProvider.value();
     if (!deps.isMock()) throw new Error('真实记账尚未接入登录会话，暂不能提交。');
     const sentAt = deps.now();
-    return { sessionId: demoSessionId, userId: 'demo-user', sentAt, chatAt: sentAt };
+    return { sessionId: demoSessionId, userId: getDemoUserId(), sentAt, chatAt: sentAt };
   }
 
   function apply(action: () => void): boolean {

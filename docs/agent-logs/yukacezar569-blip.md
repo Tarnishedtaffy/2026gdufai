@@ -64,3 +64,33 @@
 - **人工审核**：用户已授权本次实现与 PR；代码理解、内部类型确认及前端/infra 审核仍待本人和负责人完成，未代填采纳
 - **遗留问题**：识别端真实输出、可信登录会话、M1/M3 对话入口和上传仍待团队接入；临时联调不代表生产 UI/鉴权/OCR/ASR 已完成；PR #9 合并后需在团队集成环境重跑
 - **备注**：20261117-01 的尚未推送是当时状态；此前代码后来上传到了个人 fork `feat/m1-confirm-import`，但没有创建 PR。本次用户已重新明确授权提交 PR；旧日志保持原文
+
+### LOG-yukacezar569-blip-20261118-02
+
+- **时间**：2026-11-18 22:44（+08:00）
+- **工具/模型**：Codex / GPT-6，含并行修复、真实 M2 集成与独立复核
+- **模块 / 分支 / PR**：M1 / `feat/m1-confirmation-followup` / #13（Refs #7）
+- **任务**：按 PR #13 的 Request changes 修复真实模式、用户身份和附件回退，更新同一个 PR 供复审
+- **关键提示词**：
+  - 用户要求根据审核建议修改后重新提交 PR；使用已配置的 GitHub CLI，无需桌面操作
+  - 核对最新 main、AGENTS/CLAUDE 入口、编码规范及契约 v1.2，保留本人任务与识别端/M2 的边界
+- **代理做了什么**：
+  - 同步并 rebase 到 `e7180fe`，解决 CaptureView 冲突；修复 App 未提供 captureContextKey、真实模式无法准备提交及 mock 用户硬编码问题
+  - App 注入部署配置的单用户身份与稳定会话；API 客户端统一携带操作者输入的内存 Bearer 令牌，页面可设置/清除且不持久化
+  - 恢复图片/语音附件选择及未识别提示；本地文件名不充当 sourceRef，识别后草稿保留真实模态和来源
+  - 将浏览器安全的纯确认流程迁到 `@gduf/capture-flow`，保留后端公共入口；更新 workspace、锁文件、Docker 和 Compose 的用户构建参数，容器 smoke 增加共享包原生导入验证
+  - 先复现真实 App 缺 provider 和分类候选丢失，再修复；对 v1.2 candidates 做边界校验、原样透传和界面展示
+  - 删除 674 行过时 PR #9 静态 fixture，改用当前真实 M2 + SQLite 自动回归；CI 输出虚构 batchId/recordId/原始响应证据，更新 README 与架构说明
+- **决策**：
+  - 采用已冻结的单用户 `DEMO_USER_ID` / `APP_AUTH_TOKEN` 方案，不新增对话、上传、登录路由或契约字段，不在 M1 重算分类、追问轮次和未来时间容差
+  - 复用同一 PR 便于对原意见逐项复审；跨前端、共享包、根依赖和 infra 的变更在 PR 单列并请求 `Tarnishedtaffy` 审核
+  - 历史日志不改写：M2 已合并，当前 v1.2 已明确 DUPLICATE_RECORD 为 warning，旧联调中的未合并状态和严重度差异不再适用
+- **验证**：
+  - Node v24.18.0、pnpm 12.21.0；`corepack pnpm install --frozen-lockfile --offline`、`corepack pnpm -r typecheck`、`corepack pnpm -r lint` 全部通过（lint 覆盖 backend 和共享包）
+  - `corepack pnpm -r test`：backend 20 文件 138 项、frontend 6 文件 46 项，共 184 项通过；真实本地 HTTP 因沙箱 loopback 限制在获准环境执行
+  - `VITE_USE_MOCK=false corepack pnpm --filter frontend build` 成功，81 modules；共享包原生 Node 导入及 prepare→submit smoke 通过
+  - 真实 Vue App + CaptureView 的自定义 renderer 回归经本地 HTTP 调用当前 Fastify/M2：首次 401 不入库，页面输入令牌后相同请求体重试入库，SPA 切页保留会话，语音/图片来源写入 SQLite；这是应用集成测试，不是完整浏览器 E2E 或 OCR/ASR 验证
+  - 真实 M2 19 项覆盖默认/自定义身份、非法用户、鉴权、缺字段补发、部分成功、退款、三轮终止、非法日历、未来 300/301 秒边界及回执丢失后 duplicate；`git diff --check` 通过
+  - 本机没有 Docker；本地未执行 Compose，推送后检查 PR CI 的 Node 22 验证和 Docker build/smoke
+- **人工审核**：用户已授权本次修复与更新 PR；独立代理复核暂未发现阻断，负责人正式复审仍待完成，不代填认可或合并
+- **遗留问题**：#6 的真实抽取、OCR/ASR 和上传尚待对接；内部交接提案与前端/infra 归属仍需相应负责人认可；M3 不属于此次改动

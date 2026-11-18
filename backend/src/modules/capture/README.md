@@ -5,7 +5,7 @@
 ## 当前交付边界
 
 - `prepare` 接收识别草稿，`update` 合并用户修正，两者都不调用 M2。
-- 用户明确确认后调用 `submit`，通过注入的导入函数提交契约 v1.1 批次。
+- 用户明确确认后调用 `submit`，通过注入的导入函数提交契约 v1.2 批次。
 - M2 返回后按 `batchId`、`recordId` 对应每一条结果；`duplicate` 展示为已经记过。
 - 仅待追问记录参与下一次提交，已完成或已放弃记录不重发。
 - 传输失败或响应无法对应时保留原批次，重试使用完全相同的载荷。
@@ -39,14 +39,14 @@
 
 主要文件归属提案：
 
-- 本工单维护 `types.ts`、`session.ts`、`validation.ts`、`feedback.ts`、`index.ts` 及 `backend/test/capture/`。
+- 本工单维护 `packages/capture-flow/src/` 中的纯流程及 `backend/test/capture/`。后端本目录的 `index.ts` 保留兼容公共入口，前端通过 `@gduf/capture-flow` 使用共享包，不跨目录引用后端源码。
 - 识别同学在独立文件中提供草稿，引用公开类型，避免同时修改 `session.ts`。
 - 前端接入为共享范围，PR 单列并请求 `Tarnishedtaffy` 审核。
 
 ## 接入方式
 
 创建 `createCaptureSession({ importBatch, newId })`，将 M2 客户端与 ID 生成器作为依赖传入。
-流程不决定 HTTP、鉴权或模型服务商；服务端调用者必须先取得经过鉴权的可信上下文。
+流程不决定 HTTP、鉴权或模型服务商。应用层依照契约 v1.2 的单用户方案提供稳定会话和 `getDemoUserId()`；识别草稿不能覆盖身份或幂等键。
 
 1. `prepare(context, drafts)`：准备单笔或多笔草稿。
 2. `update(recordId, patch)`：合并用户明确修改的字段，未提及字段不变。
@@ -70,23 +70,17 @@ corepack pnpm dev:frontend
 
 以根 `package.json` 为准，当前要求 Node >=22.18、pnpm 12.21.0。
 前端默认使用模拟模式，演示结果存于内存，刷新后不会保留。
-本流程单元测试使用契约 stub。主仓库当前尚未合并 M2 导入实现；PR #9（c288019）可用于临时真实 Fastify/SQLite 联调，结论与 stub 分开记录。鉴权、OCR/ASR 及完整对话入口仍需和相应负责人完成接入。
-前端真实模式必须由应用注入可信会话上下文，不能复用演示用户身份。
+单元测试使用契约 stub；`backend/test/capture/` 的集成测试直接使用当前主仓库的真实 Fastify/M2 和 SQLite 内存数据库，包含鉴权、确认前不入库、补字段、网络重试及最新时间规则。前端应用级回归验证会话 provider 与真实 API 客户端的衔接，和 mock 演示分开记录。
 
-### 临时真实 M2 联调（2026-11-18）
+### 真实模式接入
 
-基于上游 `c47e094`，在临时副本覆盖未合并 PR #9 的 `c28801929b52f86e744ee7a4f748f2febb7953d5`，
-通过真实 Fastify `app.inject` 和 SQLite 内存数据库执行契约第 4 节 M1 的 8 项检查，另加三轮终止、部分成功、多模态统一提交，共 11/11 场景通过。
-M2 响应没有使用 stub；该分支没有包含或修改队友的 M2 实现。
+Docker 前端使用真实 API。Compose 构建时将 `DEMO_USER_ID` 同步给前端的 `VITE_DEMO_USER_ID`；更换用户后必须重新构建。分开启动前后端时也必须保证两者一致。
 
-虚构请求、`batchId` / `recordId` 和原始响应保存在
-`backend/test/capture/fixtures/m2-pr9-evidence.json`。这是固定版本的验证证据，不是 CI 中自动重放的服务端。
-缺 `sentAt` 场景分别验证 M1 阻止发送和直接非法请求被 M2 返回 `INVALID_BATCH`。
-网络场景在真实入库后丢弃回执，重试得到 `duplicate` 且账单仍只有一笔。
+配置了非占位 `APP_AUTH_TOKEN` 时，在页面的会话鉴权入口输入同一令牌。令牌仅在本页内存使用，由 API 客户端发送 Bearer 请求头；不写入浏览器存储、不放入前端构建变量，刷新后需重新输入。未配置或为 `change-me` 时按契约开发模式放行；生产必须设置非占位值。
 
-观察到 M2 实际将 `DUPLICATE_RECORD` 严重度返回为 `warning`，契约 1.5 登记为 `blocking`；
-本流程原样保留严重度，并依据 `duplicate` 状态完成，差异交由 M2 维护人核对。
-这次联调不验证可信鉴权、生产界面、OCR、ASR 或上传；语音/图片从虚构字段草稿开始。
+图片/语音保留附件入口与待接入提示。真实识别结果通过 `acceptDrafts` 交接 `modality` 与服务端 `sourceRef`；本地文件名不作为上传引用。OCR、ASR 和上传接口仍由 #6 及契约变更流程接入，本 PR 未实现这些能力。
+
+旧 PR #9 `c288019` 的静态 fixture 已被当前 M2 自动回归取代，历史日志保持原文。当前契约规定 `DUPLICATE_RECORD` 为 `warning`，不再存在旧日志中记载的契约差异。M1 原样保留反馈严重度与可选分类候选，不重算追问轮次或未来时间容差。
 
 未知反馈码会保留并展示，不擅自解释为入库、退款或时间修正。
 M1/M3 的对外对话和上传接口仍按团队的 contract-change 流程确认。

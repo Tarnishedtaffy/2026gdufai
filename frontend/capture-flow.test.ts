@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createCaptureFlow } from './src/composables/useCaptureFlow';
 import { mockImportBatch } from './src/mock/import';
 import { parseCaptureEdit } from './src/components/capture/capture-form';
-import type { CaptureDraft, ImportBatch, ImportRecord } from '../backend/src/modules/capture/index.ts';
+import type { CaptureDraft, ImportBatch, ImportRecord } from '@gduf/capture-flow';
 
 const sentAt = '2026-11-17T19:00:00+08:00';
 const draft: CaptureDraft = {
@@ -65,12 +65,12 @@ describe('M1 确认界面流程适配', () => {
     expect(flow.snapshot.value.phase).toBe('draft');
     await flow.confirm();
     const batch = client.mock.calls[0]![0];
-    expect(batch.records[0]).toMatchObject({ amount: 32.5, merchant: '虚构咖啡店', sourceRef: null, userId: 'demo-user' });
+    expect(batch.records[0]).toMatchObject({ amount: 32.5, merchant: '虚构咖啡店', sourceRef: null, userId: 'u_001' });
     expect(batch.records[0]?.occurredAt).toBe('2026-11-16T12:00:00+08:00');
     expect(flow.snapshot.value.phase).toBe('complete');
   });
 
-  it('真实模式没有可信会话时禁止生成 demo-user 的真实请求', async () => {
+  it('未注入可信上下文时阻止真实提交', async () => {
     const client = vi.fn(async () => ({}));
     const flow = setup(client, false);
     expect(flow.canPrepare.value).toBe(false);

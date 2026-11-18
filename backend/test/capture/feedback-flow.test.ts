@@ -1,120 +1,89 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createCaptureSession } from '../../src/modules/capture/index.ts';
-import type { ImportBatch } from '../../src/modules/capture/index.ts';
-import { context, draft, idGenerator, response } from './helpers.ts';
+import { afterEach, describe, expect, it } from 'vitest';
+import { nowIsoShanghai } from '../../src/shared/time.ts';
+import { createLedgerHarness, type LedgerHarness } from './ledger-harness.ts';
 
-/** Issue #7 的 M1 契约流程测试；预设 M2 回执，不在 stub 中实现 M2 的业务判断。 */
-describe('M1 根据 M2 反馈继续用户确认', () => {
-  it.each([
-    { label: '缺时间', occurredAt: null, code: 'MISSING_TIME' },
-    { label: '未来时间', occurredAt: '2099-11-17T08:00:00+08:00', code: 'FUTURE_TIME' },
-  ])('$label 首轮追问，次轮回显 M2 实际采用的聊天时间', async ({ occurredAt, code }) => {
-    const returnedTime = '2026-11-17T08:42:00+08:00';
-    const importBatch = vi.fn(async (batch: ImportBatch) => response(batch));
-    importBatch.mockImplementationOnce(async batch => response(batch, [{
-      status: 'pending_followup', transactionId: null, occurredAt,
-      feedback: [{ field: 'occurredAt', code, severity: 'blocking' }],
-    }])).mockImplementationOnce(async batch => response(batch, [{
-      occurredAt: returnedTime,
-      feedback: [{ field: 'occurredAt', code: 'TIME_DEFAULTED_TO_CHAT_TIME', severity: 'warning' }],
-    }]));
-    const session = createCaptureSession({ importBatch, newId: idGenerator() });
-    const initial = session.prepare({ ...context, chatAt: returnedTime }, [draft({ occurredAt, direction: 'expense' })]);
+const opened: LedgerHarness[] = [];
+const ledger = () => { const harness = createLedgerHarness(); opened.push(harness); return harness; };
+afterEach(async () => { await Promise.all(opened.splice(0).map(harness => harness.close())); });
 
-    const first = await session.submit();
+/** Current real M2 responses replace recordings from the former unmerged PR #9. */
+describe('M1 根据真实 M2 反馈继续用户确认', () => {
+  it.each(['缺时间', '未来时间'] as const)('%s 首轮追问，次轮回显 M2 采用的聊天时间', async label => {
+    const h = ledger();
+    const occurredAt = label === '缺时间' ? null : nowIsoShanghai(new Date(Date.now() + 60 * 60 * 1000));
+    const code = label === '缺时间' ? 'MISSING_TIME' : 'FUTURE_TIME';
+    const returnedTime = nowIsoShanghai(new Date(Date.now() - 2 * 60 * 1000));
+    const initial = h.session.prepare({ ...h.context, chatAt: returnedTime }, [h.draft({ occurredAt })]);
+    expect(h.transactionCount()).toBe(0);
+    expect(h.batches).toHaveLength(0);
+    const first = await h.session.submit();
     expect(first.phase).toBe('pending_followup');
     expect(first.records[0]!.messages).toMatchObject([{ code, severity: 'blocking' }]);
-    expect(importBatch).toHaveBeenCalledTimes(1);
-    const second = await session.submit();
-
+    expect(h.transactionCount()).toBe(0);
+    const second = await h.session.submit();
     expect(second.phase).toBe('complete');
     expect(second.records[0]!.result?.occurredAt).toBe(returnedTime);
-    expect(second.records[0]!.messages[0]).toMatchObject({
+    expect(second.records[0]!.messages).toContainEqual(expect.objectContaining({
       code: 'TIME_DEFAULTED_TO_CHAT_TIME', severity: 'warning', text: expect.stringContaining(returnedTime),
-    });
-    for (const [batch] of importBatch.mock.calls) {
-      expect(batch.sentAt).toBe(context.sentAt);
+    }));
+    expect(h.transactionCount()).toBe(1);
+    for (const batch of h.batches) {
+      expect(batch.sentAt).toBe(h.context.sentAt);
       expect(batch.records[0]).toMatchObject({ occurredAt, chatAt: returnedTime,
         idempotencyKey: initial.records[0]!.record.idempotencyKey });
     }
   });
 
-  it('方向冲突先显示追问，确认后按 M2 返回的收入方向和类别展示', async () => {
-    const category = { id: 9, name: '工资', kind: 'income' as const };
-    const importBatch = vi.fn(async (batch: ImportBatch) => response(batch));
-    importBatch.mockImplementationOnce(async batch => response(batch, [{
-      status: 'pending_followup', transactionId: null, direction: 'expense', category,
-      feedback: [{ field: 'direction', code: 'CATEGORY_KIND_MISMATCH', severity: 'blocking' }],
-    }])).mockImplementationOnce(async batch => response(batch, [{
-      direction: 'income', category,
-      feedback: [{ field: 'direction', code: 'DIRECTION_FORCED_BY_CATEGORY', severity: 'warning' }],
-    }]));
-    const session = createCaptureSession({ importBatch, newId: idGenerator() });
-    const initial = session.prepare(context, [draft({ direction: 'expense', rawText: '演示工资 100 元', amount: 100 })]);
-
-    const first = await session.submit();
+  it('方向冲突先显示追问，确认后按 M2 返回的收入类别展示', async () => {
+    const h = ledger();
+    const initial = h.session.prepare(h.context, [h.draft({ direction: 'expense', merchant: '虚构用工方',
+      rawText: '演示工资到账 100 元', amount: 100 })]);
+    const first = await h.session.submit();
     expect(first.phase).toBe('pending_followup');
     expect(first.records[0]!.messages[0]?.code).toBe('CATEGORY_KIND_MISMATCH');
-    expect(importBatch).toHaveBeenCalledTimes(1);
-    const second = await session.submit();
-
+    expect(h.transactionCount()).toBe(0);
+    const second = await h.session.submit();
     expect(second.phase).toBe('complete');
-    expect(second.records[0]!.result).toMatchObject({ direction: 'income', category });
-    expect(second.records[0]!.messages[0]).toMatchObject({
+    expect(second.records[0]!.result).toMatchObject({ direction: 'income', category: { name: '工资', kind: 'income' } });
+    expect(second.records[0]!.messages).toContainEqual(expect.objectContaining({
       code: 'DIRECTION_FORCED_BY_CATEGORY', severity: 'warning', text: expect.stringContaining('收入'),
-    });
-    for (const [batch] of importBatch.mock.calls) {
+    }));
+    for (const batch of h.batches) {
       expect(batch.records[0]).toMatchObject({ direction: 'expense', amount: 100,
         idempotencyKey: initial.records[0]!.record.idempotencyKey });
       expect(batch.records[0]).not.toHaveProperty('categoryId');
     }
   });
 
-  it('退款按 M2 的 rejected 结果提示作废原账单，不自动记为收入或再次提交', async () => {
-    const importBatch = vi.fn(async (batch: ImportBatch) => response(batch, [{
-      status: 'rejected', transactionId: null,
-      feedback: [{ field: 'amount', code: 'REFUND_NOT_SUPPORTED', severity: 'blocking' }],
-    }]));
-    const session = createCaptureSession({ importBatch, newId: idGenerator() });
-    const initial = session.prepare(context, [draft({ rawText: '演示商品退款 12.50 元', direction: 'expense' })]);
-    expect(importBatch).not.toHaveBeenCalled();
-
-    const snapshot = await session.submit();
+  it('真实 M2 拒绝退款，M1 提示作废原账单且不再次提交', async () => {
+    const h = ledger();
+    const initial = h.session.prepare(h.context, [h.draft({ rawText: '演示商品退款 12.50 元', direction: 'expense' })]);
+    expect(h.batches).toHaveLength(0);
+    const snapshot = await h.session.submit();
     expect(snapshot.phase).toBe('complete');
     expect(snapshot.records[0]!.result?.status).toBe('rejected');
     expect(snapshot.records[0]!.messages[0]).toMatchObject({
       code: 'REFUND_NOT_SUPPORTED', severity: 'blocking', text: expect.stringContaining('作废原账单'),
     });
-    expect(importBatch.mock.calls[0]![0].records[0]).toMatchObject({ amount: 12.5, direction: 'expense' });
-    expect(() => session.update(initial.records[0]!.record.recordId, { direction: 'income' })).toThrow();
-    await session.submit();
-    expect(importBatch).toHaveBeenCalledTimes(1);
+    expect(h.transactionCount()).toBe(0);
+    expect(() => h.session.update(initial.records[0]!.record.recordId, { direction: 'income' })).toThrow();
+    await h.session.submit();
+    expect(h.batches).toHaveLength(1);
   });
 
-  it('第三次由 M2 返回 rejected 后保持只读，M1 不发送或自行维护 followupRound', async () => {
-    const feedback = [{ field: 'amount', code: 'MISSING_AMOUNT', severity: 'blocking' as const }];
-    const importBatch = vi.fn(async (batch: ImportBatch) => response(batch, [{
-      status: 'pending_followup', transactionId: null, feedback,
-    }]));
-    importBatch.mockImplementationOnce(async batch => response(batch, [{
-      status: 'pending_followup', transactionId: null, feedback,
-    }])).mockImplementationOnce(async batch => response(batch, [{
-      status: 'pending_followup', transactionId: null, feedback,
-    }])).mockImplementationOnce(async batch => response(batch, [{ status: 'rejected', transactionId: null, feedback }]));
-    const session = createCaptureSession({ importBatch, newId: idGenerator() });
-    const initial = session.prepare(context, [draft({ amount: null })]);
-
-    expect((await session.submit()).phase).toBe('pending_followup');
-    expect(importBatch).toHaveBeenCalledTimes(1);
-    expect((await session.submit()).phase).toBe('pending_followup');
-    expect(importBatch).toHaveBeenCalledTimes(2);
-    const third = await session.submit();
+  it('第三次由真实 M2 返回 rejected，M1 不自行维护轮次或重发终态', async () => {
+    const h = ledger();
+    const initial = h.session.prepare(h.context, [h.draft({ amount: null })]);
+    expect((await h.session.submit()).phase).toBe('pending_followup');
+    expect((await h.session.submit()).phase).toBe('pending_followup');
+    const third = await h.session.submit();
     expect(third.phase).toBe('complete');
     expect(third.records[0]!.result?.status).toBe('rejected');
-    expect(() => session.update(initial.records[0]!.record.recordId, { amount: 20 })).toThrow();
-    expect((await session.submit()).records[0]!.result?.status).toBe('rejected');
-    expect(importBatch).toHaveBeenCalledTimes(3);
-    for (const [batch] of importBatch.mock.calls) {
+    expect(() => h.session.update(initial.records[0]!.record.recordId, { amount: 20 })).toThrow();
+    expect((await h.session.submit()).records[0]!.result?.status).toBe('rejected');
+    expect(h.batches).toHaveLength(3);
+    expect(h.transactionCount()).toBe(0);
+    for (const batch of h.batches) {
       expect(batch).not.toHaveProperty('followupRound');
       expect(batch.records[0]).not.toHaveProperty('followupRound');
       expect(batch.records[0]).toMatchObject({ amount: null, idempotencyKey: initial.records[0]!.record.idempotencyKey });
@@ -122,25 +91,21 @@ describe('M1 根据 M2 反馈继续用户确认', () => {
   });
 
   it.each([
-    { modality: 'voice' as const, sourceRef: 'uploads/2026/11/demo-voice.webm' },
-    { modality: 'image' as const, sourceRef: 'uploads/2026/11/demo-receipt.jpg' },
-  ])('$modality 草稿使用相同确认与追问流程，源文件引用重发时保持不变', async ({ modality, sourceRef }) => {
-    const importBatch = vi.fn(async (batch: ImportBatch) => response(batch));
-    importBatch.mockImplementationOnce(async batch => response(batch, [{
-      status: 'pending_followup', transactionId: null,
-      feedback: [{ field: 'amount', code: 'MISSING_AMOUNT', severity: 'blocking' }],
-    }]));
-    const session = createCaptureSession({ importBatch, newId: idGenerator() });
-    const initial = session.prepare(context, [draft({ modality, sourceRef, amount: null, rawText: '演示商户消费' })]);
-    expect(importBatch).not.toHaveBeenCalled();
-    expect((await session.submit()).phase).toBe('pending_followup');
-    session.update(initial.records[0]!.record.recordId, { amount: 32.5, merchant: '核对后的演示商户' });
-    expect(importBatch).toHaveBeenCalledTimes(1);
-    expect((await session.submit()).phase).toBe('complete');
-    expect(importBatch.mock.calls[1]![0].records[0]?.amount).toBe(32.5);
-    for (const [batch] of importBatch.mock.calls) {
-      expect(batch.records[0]).toMatchObject({ modality, sourceRef, rawText: '演示商户消费',
-        idempotencyKey: initial.records[0]!.record.idempotencyKey });
+    { modality: 'voice' as const, sourceRef: 'uploads/demo-voice.webm' },
+    { modality: 'image' as const, sourceRef: 'uploads/demo-receipt.jpg' },
+  ])('$modality 识别草稿补金额后经真实 M2 入库，源文件引用保持不变', async ({ modality, sourceRef }) => {
+    const h = ledger();
+    const initial = h.session.prepare(h.context, [h.draft({ modality, sourceRef, amount: null })]);
+    expect(h.batches).toHaveLength(0);
+    expect((await h.session.submit()).phase).toBe('pending_followup');
+    h.session.update(initial.records[0]!.record.recordId, { amount: 32.5, merchant: '核对后的演示商户' });
+    expect((await h.session.submit()).phase).toBe('complete');
+    expect(h.transactionCount()).toBe(1);
+    for (const batch of h.batches) {
+      expect(batch.records[0]).toMatchObject({ modality, sourceRef,
+        recordId: initial.records[0]!.record.recordId, idempotencyKey: initial.records[0]!.record.idempotencyKey });
     }
+    const response = await h.app.inject({ method: 'GET', url: '/api/transactions' });
+    expect(response.json()).toMatchObject({ items: [{ amountCents: 3250, sourceModality: modality, sourceRef }] });
   });
 });

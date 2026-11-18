@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { CaptureDraft, CaptureSnapshot } from '../../../../backend/src/modules/capture/index.ts';
+import type { CaptureDraft, CaptureSnapshot } from '@gduf/capture-flow';
 import { normalizeIsoOffset, fmtDateTime } from '../../utils/datetime';
 import { parseCaptureEdit, type CaptureEditableField } from './capture-form';
 
@@ -65,6 +65,7 @@ function change(field: CaptureEditableField): void {
       <p v-if="row.result.occurredAt">返回发生时间：{{ fmtDateTime(row.result.occurredAt) }}</p>
       <p v-for="(message, messageIndex) in row.messages" :key="messageIndex" :class="row.result.status === 'duplicate' ? 'warning' : message.severity">
         {{ row.result.status === 'pending_followup' && message.severity === 'blocking' ? '需要补充' : row.result.status === 'rejected' ? '未完成原因' : '提示' }}：{{ message.text }}
+        <span v-if="message.candidates?.length">参考类别：{{ message.candidates.map(candidate => candidate.name).join('、') }}</span>
       </p>
     </div>
   </article>

@@ -22,8 +22,15 @@ export type FeedbackCode =
 export type HttpErrorCode =
   | 'INVALID_BATCH'
   | 'INVALID_DIMENSION_PARAM'
+  | 'INVALID_QUERY_PARAM'
   | 'CATEGORY_NOT_FOUND'
   | 'CATEGORY_IN_USE'
+  | 'CATEGORY_NAME_TAKEN'
+  | 'CATEGORY_PRESET_PROTECTED'
+  | 'CATEGORY_KIND_MISMATCH'
+  | 'BUDGET_NOT_FOUND'
+  | 'BUDGET_CONFLICT'
+  | 'INTERNAL_ERROR'
   | 'UNAUTHORIZED';
 
 export const feedbackText: Record<FeedbackCode, string> = {
@@ -72,6 +79,7 @@ export interface FeedbackItem {
   field: string | null;
   code: FeedbackCode;
   severity: FeedbackSeverity;
+  candidates?: { id: number; name: string }[];
 }
 
 export interface ImportResultItem {

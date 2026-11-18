@@ -4,6 +4,33 @@ import type { ImportBatch, ImportResult } from '../../src/modules/capture/index.
 import { context, draft, idGenerator, response } from './helpers.ts';
 
 describe('M1 对 M2 回执的边界处理', () => {
+  it('v1.2 分类候选随反馈原样保留，修改快照不影响原回执', async () => {
+    const candidates = [{ id: 1, name: '餐饮' }, { id: 3, name: '购物' }];
+    const session = createCaptureSession({ newId: idGenerator(), importBatch: async batch => response(batch, [{
+      feedback: [{ field: 'category', code: 'LOW_CONFIDENCE_CATEGORY', severity: 'warning', candidates }],
+    }]) });
+    session.prepare(context, [draft()]);
+    const snapshot = await session.submit();
+    expect(snapshot.records[0]!.result?.feedback[0]).toMatchObject({ candidates });
+    expect(snapshot.records[0]!.messages[0]).toMatchObject({ candidates });
+    snapshot.records[0]!.result!.feedback[0]!.candidates![0]!.name = '改写';
+    expect(session.getSnapshot().records[0]!.result!.feedback[0]!.candidates).toEqual(candidates);
+  });
+
+  it.each([
+    { candidates: Array.from({ length: 4 }, (_, index) => ({ id: index + 1, name: '候选' })) },
+    { candidates: [{ id: '1', name: '餐饮' }] }, { candidates: [{ id: 1, name: '' }] },
+  ])('非法分类候选使整批保留为可安全重试', async ({ candidates }) => {
+    const session = createCaptureSession({ newId: idGenerator(), importBatch: async batch => ({
+      ...response(batch), results: [{ ...response(batch).results[0], feedback: [
+        { field: 'category', code: 'LOW_CONFIDENCE_CATEGORY', severity: 'warning', candidates },
+      ] }],
+    }) });
+    session.prepare(context, [draft()]);
+    expect((await session.submit()).phase).toBe('retry');
+    expect(session.getSnapshot().records[0]!.result).toBeNull();
+  });
+
   const invalidResponses: [string, (batch: ImportBatch) => unknown][] = [
     ['错批', batch => ({ ...response(batch), batchId: 'other_batch' })],
     ['漏项', batch => ({ ...response(batch), results: response(batch).results.slice(0, 1) })],

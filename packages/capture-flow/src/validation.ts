@@ -89,7 +89,20 @@ export function readPatch(value: Partial<CaptureDraft>): Partial<CaptureDraft> {
 function readFeedback(value: unknown): CaptureFeedback {
   const data = object(value);
   if (data.severity !== 'blocking' && data.severity !== 'warning') throw new Error('M2 反馈严重度无效。');
-  return { field: nullableText(data.field, '反馈字段'), code: requiredText(data.code, '反馈码'), severity: data.severity };
+  const feedback: CaptureFeedback = {
+    field: nullableText(data.field, '反馈字段'), code: requiredText(data.code, '反馈码'), severity: data.severity,
+  };
+  if (data.candidates !== undefined) {
+    if (feedback.code !== 'LOW_CONFIDENCE_CATEGORY' || !Array.isArray(data.candidates) || data.candidates.length > 3) {
+      throw new Error('M2 分类候选无效。');
+    }
+    feedback.candidates = data.candidates.map(value => {
+      const item = object(value);
+      if (!Number.isInteger(item.id) || Number(item.id) <= 0) throw new Error('M2 分类候选标识无效。');
+      return { id: Number(item.id), name: requiredText(item.name, '候选类别名称') };
+    });
+  }
+  return feedback;
 }
 
 function readResult(value: unknown): ImportResult {

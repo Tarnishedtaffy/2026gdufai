@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { CaptureDraft } from '../../../backend/src/modules/capture/index.ts';
+import type { CaptureDraft } from '@gduf/capture-flow';
 import { useCaptureFlow } from '../composables/useCaptureFlow';
 import { isMockEnabled } from '../api/request';
 import { normalizeIsoOffset } from '../utils/datetime';
 import { yuanToCents, centsToYuanNumber } from '../utils/money';
 import CaptureDraftCard from '../components/capture/CaptureDraftCard.vue';
+import CaptureAttachmentEntry from '../components/capture/CaptureAttachmentEntry.vue';
 
 const { snapshot, inputError, canPrepare, prepare, update, confirm } = useCaptureFlow();
 const showEntry = ref(snapshot.value.phase === 'empty');
@@ -88,6 +89,7 @@ defineExpose({ acceptDrafts });
       <p v-if="formError" class="alert" role="alert">{{ formError }}</p>
       <div class="actions"><button type="submit" class="primary" :disabled="!canPrepare">生成待确认草稿</button><button type="button" :disabled="!canPrepare" @click="prepareSamples">载入两条虚构示例</button></div>
     </form>
+    <CaptureAttachmentEntry v-if="showEntry" />
     <template v-else>
       <p v-if="snapshot.phase === 'draft'" class="hint">请核对以下 {{ snapshot.records.length }} 条草稿。点击确认之前不会提交。</p>
       <p v-if="snapshot.phase === 'pending_followup'" class="hint">请补充对应记录；已完成的记录不会重复提交。</p>

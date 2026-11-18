@@ -8,7 +8,6 @@ import { mockListTransactions, mockGetBudgets, mockGetCategories } from './src/m
 import { centsToYuanNumber, yuanToCents, formatCents, toYuanInput } from './src/utils/money';
 import { normalizeIsoOffset } from './src/utils/datetime';
 import type { ImportRecord } from './src/types/contract';
-
 const SRC = join(process.cwd(), 'src');
 const base = {
   userId: 'u_demo', amount: 30, merchant: null,
@@ -21,7 +20,6 @@ function rec(id: string, key: string, patch: Partial<ImportRecord> = {}): Import
 const batch = (id: string, key: string, patch: Partial<ImportRecord> = {}) => ({
   version: 1 as const, batchId: 'b-' + id, sentAt: '2026-11-16T20:00:00+08:00', records: [rec(id, key, patch)],
 });
-
 // ---------- R1/R2 专项 ----------
 describe('R1 分转元收口', () => {
   it('centsToYuanNumber 语义正确', () => {
@@ -39,7 +37,6 @@ describe('R1 分转元收口', () => {
     expect(code).toContain('centsToYuanNumber } from');
   });
 });
-
 describe('R2 dateField 对齐契约', () => {
   it('stats 运行值 = occurred_date', () => {
     const s = mockGetStats({ dimension: 'recent7' });
@@ -56,7 +53,6 @@ describe('R2 dateField 对齐契约', () => {
     expect(s).not.toContain("dateField: 'occurredAt'");
   });
 });
-
 // ---------- 硬约束静态检查 ----------
 describe('硬约束静态扫描', () => {
   function walk(dir: string): string[] {
@@ -69,7 +65,6 @@ describe('硬约束静态扫描', () => {
     return out;
   }
   const files = walk(SRC);
-
   it('fetch 只在 api/request.ts 出现', () => {
     const hits = files.filter(f => readFileSync(f, 'utf8').includes('fetch('));
     for (const h of hits) expect(h.replace(/\\/g, '/').endsWith('/api/request.ts')).toBe(true);
@@ -97,7 +92,6 @@ describe('硬约束静态扫描', () => {
     expect(blocking).toEqual([]);
   });
 });
-
 // ---------- 金额工具精度 ----------
 describe('金额工具', () => {
   it('元→分→元 往返无精度漂移', () => {
@@ -116,7 +110,6 @@ describe('金额工具', () => {
     expect(toYuanInput(null)).toBe('');
   });
 });
-
 // ---------- 时间归一化 ----------
 describe('时间 +08:00', () => {
   it('无偏移补 +08:00，Z 转 +08:00', () => {
@@ -128,7 +121,6 @@ describe('时间 +08:00', () => {
     expect(b).not.toContain('Z');
   });
 });
-
 // ---------- 入站状态机回归 ----------
 describe('入站状态机', () => {
   it('反馈码集合 11 个全等契约', async () => {
@@ -168,7 +160,6 @@ describe('入站状态机', () => {
     expect(r.category?.kind).toBe('income');
   });
 });
-
 // ---------- 统计/账单/预算形状 ----------
 describe('响应形状', () => {
   it('统计 buckets[].categories 非空且字段齐全', () => {
@@ -197,7 +188,6 @@ describe('响应形状', () => {
     expect(true).toBe(true);
   });
 });
-
 // ---------- 单用户身份 ----------
 describe('前端 userId 与 DEMO_USER_ID 对齐', () => {
   it('未配置时默认 u_001', () => {
@@ -205,7 +195,6 @@ describe('前端 userId 与 DEMO_USER_ID 对齐', () => {
     expect(getDemoUserId()).toBe('u_001');
     vi.unstubAllEnvs();
   });
-
   it('配置后按配置值返回', () => {
     vi.stubEnv('VITE_DEMO_USER_ID', 'u_demo');
     expect(getDemoUserId()).toBe('u_demo');

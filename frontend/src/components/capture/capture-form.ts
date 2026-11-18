@@ -1,4 +1,4 @@
-import type { CaptureDraft } from '../../../../backend/src/modules/capture/index.ts';
+import type { CaptureDraft } from '@gduf/capture-flow';
 import { normalizeIsoOffset } from '../../utils/datetime';
 import { centsToYuanNumber, yuanToCents } from '../../utils/money';
 

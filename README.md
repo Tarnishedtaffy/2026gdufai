@@ -45,7 +45,7 @@ docker compose up --build
 镜像以非 root 用户运行，由 Fastify 在同一端口托管 Vue 构建产物和 API。
 构建和运行固定使用 `node:22.23.5-bookworm-slim` 及 Dockerfile 中的 digest，CI 使用 `.node-version` 中的同一版本；升级时同步更新这两处并重新验证。该标签已对照 [Docker 官方镜像清单](https://github.com/docker-library/official-images/blob/master/library/node) 和 registry manifest 核实。
 `assets/` 中符合 Vite 默认八位 hash 命名的资源使用一年 immutable 缓存；所有 HTML（含 Vue 页面回退）及未版本化文件使用 `no-cache`，浏览器通过 ETag 重新验证。
-镜像中的前端固定使用真实 API（`VITE_USE_MOCK=false`）；当前仍为开发骨架，尚未实现的业务接口会返回错误，容器启动通过不代表记账功能已完成。
+镜像中的前端固定使用真实 API（`VITE_USE_MOCK=false`）。采集页支持手动填写/核对草稿并明确确认后提交 M2；图片/语音识别仍待接入，保留附件入口与提示。容器启动检查和记账流程回归分别验证。
 数据库与上传目录在容器内固定为 `/app/data/app.db`、`/app/uploads`；`docker compose down` 保留数据，`down --volumes` 会删除数据。
 
 ### 用户与鉴权变量（契约 v1.2）
@@ -55,6 +55,10 @@ docker compose up --build
 | `DEMO_USER_ID` | `u_001` | 单用户演示的唯一用户；入站记录的 `userId` 必须与之一致，否则整批 `INVALID_BATCH` | 已实现（服务端校验 + 前端 `VITE_DEMO_USER_ID`） |
 | `APP_AUTH_TOKEN` | `change-me` | Bearer 鉴权令牌；为空或 `change-me` 时按开发模式放行 | 已实现（`/api/*` Bearer 校验） |
 | `VITE_DEMO_USER_ID` | `u_001` | 前端构建期变量；必须与 `DEMO_USER_ID` 相同 | 已实现（未配置时按 `u_001`） |
+
+Compose 构建自动使用 `DEMO_USER_ID` 设置前端的 `VITE_DEMO_USER_ID`。更换演示用户后执行 `docker compose up --build`；直接运行 Docker build 时可用同名 build arg 设置前端用户，并确保运行时 `DEMO_USER_ID` 相同。分开开发前后端时，在根 `.env` 中同时设置这两个变量。
+
+启用 `APP_AUTH_TOKEN` 后，在页面的会话鉴权入口输入同一令牌。API 请求携带 Bearer 头；令牌仅保存在当前页面内存，刷新后重新输入。不要把令牌改成 `VITE_*` 变量或写入前端代码。生产必须配置非占位值。
 
 #### 已有数据卷出现权限错误
 
@@ -116,7 +120,7 @@ docker compose pull
 docker compose up -d --no-build --wait
 ```
 
-`IMAGE_NAME` 只供 Compose 选择镜像。构建阶段不读取 `.env`，运行时才注入配置。
+`IMAGE_NAME` 只供 Compose 选择镜像。Compose 仅将非敏感的 `DEMO_USER_ID` 作为前端构建参数；其余服务端配置在运行时注入，不打包进前端。预构建镜像必须与其构建时的演示用户一致。
 镜像回滚可切换到之前的 SHA 标签；已有数据库迁移需另外评估兼容性并备份。此流程提供持续交付，服务器部署仍由团队执行。
 
 ## 团队分工
