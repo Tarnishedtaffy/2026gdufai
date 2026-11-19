@@ -30,3 +30,16 @@ it('按 v1.2 原样展示低置信反馈的候选名称，成功回执不新增�
     expect(allNodes(mounted.root).find(node => node.kind === 'fieldset')?.props.disabled).toBe(true);
   } finally { mounted.unmount(); }
 });
+
+it('duplicate 回执展示已记过并沿用原账单', () => {
+  vi.stubGlobal('document', { activeElement: null });
+  const record = { recordId: 'r_duplicate', userId: 'u_001', idempotencyKey: 'demo-key', chatAt: null,
+    rawText: '虚构重复消费', amount: 12, merchant: null, occurredAt: null, direction: null,
+    confidence: null, modality: 'text', sourceRef: null };
+  const mounted = mountUi(CaptureDraftCard, { row: { record, messages: [], result: {
+    recordId: record.recordId, status: 'duplicate', transactionId: 'tx_original', direction: 'expense',
+    occurredAt: null, category: null, confidence: null, feedback: [],
+  } }, locked: false, index: 0 });
+  try { expect(visibleText(mounted.root)).toContain('已记过，沿用原账单'); }
+  finally { mounted.unmount(); }
+});

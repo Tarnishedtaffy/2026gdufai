@@ -1,4 +1,4 @@
-/** M1 内部接入提案，供识别与前端同学确认；外部请求遵循契约 v1.2。 */
+/** M1 内部接入提案，供识别与前端同学确认；外部字段遵循当前冻结的接口契约。 */
 export interface CaptureDraft {
   amount: number | null;
   merchant: string | null;
@@ -18,7 +18,7 @@ export interface CaptureContext {
   chatAt: string | null;
 }
 
-/** 契约 1.3 的入站记录；amount 始终使用元。 */
+/** 契约 §1.3 的入站记录；amount 始终使用元。 */
 export interface ImportRecord extends CaptureDraft {
   recordId: string;
   userId: string;
@@ -26,7 +26,7 @@ export interface ImportRecord extends CaptureDraft {
   idempotencyKey: string;
 }
 
-/** 契约 1.2 的批次包装，不包含内部 sessionId。 */
+/** 契约 §1.2 的批次包装，不包含内部 sessionId。 */
 export interface ImportBatch {
   version: 1;
   batchId: string;
@@ -42,8 +42,8 @@ export interface CaptureFeedback {
   candidates?: { id: number; name: string }[];
 }
 
-/** 契约 1.4 的处理结果；未知响应在进入流程前做运行时检查。 */
-export interface ImportResult {
+/** 契约 §1.4 的单条处理结果；未知响应在进入流程前做运行时检查。 */
+export interface CaptureResult {
   recordId: string;
   status: 'confirmed' | 'pending_followup' | 'duplicate' | 'rejected';
   transactionId: string | null;
@@ -64,7 +64,7 @@ export interface CaptureSnapshot {
   phase: 'empty' | 'draft' | 'submitting' | 'pending_followup' | 'complete' | 'retry';
   sessionId: string | null;
   batchId: string | null;
-  records: { record: ImportRecord; result: ImportResult | null; messages: CaptureMessage[] }[];
+  records: { record: ImportRecord; result: CaptureResult | null; messages: CaptureMessage[] }[];
   error: string | null;
 }
 
@@ -79,5 +79,7 @@ export interface CaptureSession {
   prepare: (context: CaptureContext, drafts: CaptureDraft[]) => CaptureSnapshot;
   update: (recordId: string, patch: Partial<CaptureDraft>) => CaptureSnapshot;
   submit: () => Promise<CaptureSnapshot>;
+  /** 仅放弃本地草稿和重试状态，不撤销服务端入库；提交执行中禁止调用。 */
+  discard: () => CaptureSnapshot;
   getSnapshot: () => CaptureSnapshot;
 }

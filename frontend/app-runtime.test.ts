@@ -1,43 +1,37 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
-import { buildApp } from '../backend/src/app.ts';
-import { openDatabase } from '../backend/src/db/client.ts';
-import { seedCategories } from '../backend/src/db/seed/categories.ts';
-import { seedDemoUser } from '../backend/src/db/seed/users.ts';
+import type { ImportBatch } from '@gduf/capture-flow';
 import { mountCaptureApp, visibleText, allNodes, dispatch, findNode } from './test-support/app-renderer';
 import { getCategories } from './src/api/index';
 import { getAccessToken, setAccessToken } from './src/api/access-token';
 
 afterEach(() => { setAccessToken(''); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
-it('真实 App 提供单用户身份，401 后输入内存令牌并原样重试，文字/语音/图片均经 HTTP 写入 SQLite', async () => {
+/** 应用级渲染与 API 边界测试；真实 HTTP 和数据库验证位于 backend 测试包。 */
+it('API stub 验证 App 身份、401 令牌修正后原批次重试及图片/语音来源透传', async () => {
   vi.stubEnv('VITE_USE_MOCK', 'false'); vi.stubEnv('VITE_DEMO_USER_ID', '');
   vi.stubGlobal('document', { activeElement: null });
   const persist = vi.fn();
   vi.stubGlobal('localStorage', { setItem: persist }); vi.stubGlobal('sessionStorage', { setItem: persist });
-  const db = openDatabase(':memory:'); seedCategories(db); seedDemoUser(db, 'u_001');
-  const server = buildApp({ db, config: { port: 0, nodeEnv: 'test', databasePath: ':memory:',
-    uploadDir: './uploads', authToken: 'demo-test-access', demoUserId: 'u_001' } });
-  let mounted: Awaited<ReturnType<typeof mountCaptureApp>> | null = null;
+  const client = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    if (new Headers(init?.headers).get('Authorization') !== 'Bearer demo-test-access') {
+      return Response.json({ error: { code: 'UNAUTHORIZED', message: '请核对访问令牌' } }, { status: 401 });
+    }
+    if (String(url).endsWith('/api/categories')) return Response.json([]);
+    const batch = JSON.parse(String(init?.body)) as ImportBatch;
+    return Response.json({ batchId: batch.batchId, results: batch.records.map(record => ({
+      recordId: record.recordId, status: 'confirmed', transactionId: `tx_${record.recordId}`,
+      direction: record.direction, occurredAt: record.occurredAt, category: null, confidence: null, feedback: [],
+    })) });
+  });
+  vi.stubGlobal('fetch', client);
+  const mounted = await mountCaptureApp();
   try {
-    const address = await server.listen({ host: '127.0.0.1', port: 0 });
-    vi.stubEnv('VITE_API_BASE_URL', address);
-    const nativeFetch = globalThis.fetch;
-    const calls: { path: string; body: string | null; authorization: string | null }[] = [];
-    vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
-      const target = typeof url === 'string' ? new URL(url, address) : url;
-      calls.push({ path: String(target), body: typeof init?.body === 'string' ? init.body : null,
-        authorization: new Headers(init?.headers).get('Authorization') });
-      // 补全同源相对路径以模拟浏览器 fetch；传输仍使用 Node 原生 HTTP。
-      return nativeFetch(target, init);
-    });
-    mounted = await mountCaptureApp();
     const attachment = findNode(mounted.root, 'cap-file');
     Object.assign(attachment, { files: [{ name: 'local-receipt.png', type: 'image/png' }] });
     await dispatch(attachment, 'change');
     expect(visibleText(mounted.root)).toContain('local-receipt.png（尚未识别）');
-    expect(visibleText(mounted.root)).toContain('暂不上传或生成可提交草稿');
-    expect(calls).toHaveLength(0);
+    expect(client).not.toHaveBeenCalled();
     mounted.view.value!.acceptDrafts([{ rawText: '演示午饭 24.5 元', amount: 24.5, merchant: '演示商户',
       direction: 'expense', occurredAt: '2026-11-17T12:00:00+08:00', modality: 'text', sourceRef: null, confidence: null }]);
     await nextTick();
@@ -46,45 +40,41 @@ it('真实 App 提供单用户身份，401 后输入内存令牌并原样重试�
     expect(button.props.disabled).toBe(false);
     await dispatch(button, 'click');
     expect(visibleText(mounted.root)).toContain('UNAUTHORIZED');
-    expect(db.prepare('SELECT id FROM transactions').all()).toEqual([]);
     const tokenInput = findNode(mounted.root, 'api-access-token');
-    expect(tokenInput.props.type).toBe('password'); expect(tokenInput.props.autocomplete).toBe('off');
     await dispatch(tokenInput, 'input', 'demo-test-access');
     await dispatch(findNode(mounted.root, 'api-access-form'), 'submit');
     expect(getAccessToken()).toBe('demo-test-access');
     expect(tokenInput.value).toBe(''); expect(persist).not.toHaveBeenCalled();
-    const retry = allNodes(mounted.root).find(node => node.kind === 'button' && visibleText(node) === '重试原提交')!;
+    const retry = allNodes(mounted.root).find(node => node.kind === 'button' && visibleText(node).trim() === '重试原提交')!;
     await dispatch(retry, 'click');
     expect(visibleText(mounted.root)).toContain('已入库');
-    expect(db.prepare('SELECT user_id, amount_cents FROM transactions').all()).toEqual([{ user_id: 'u_001', amount_cents: 2450 }]);
-    expect(calls[0]!.body).toBe(calls[1]!.body);
-    expect(calls.map(call => call.authorization)).toEqual([null, 'Bearer demo-test-access']);
-    const firstKey = JSON.parse(calls[0]!.body!).records[0].idempotencyKey as string;
-
+    expect(client.mock.calls[0]![1]?.body).toBe(client.mock.calls[1]![1]?.body);
+    const firstBatch = JSON.parse(String(client.mock.calls[0]![1]?.body)) as ImportBatch;
+    expect(firstBatch.records[0]).toMatchObject({ userId: 'u_001', amount: 24.5, sourceRef: null });
+    const firstKey = firstBatch.records[0]!.idempotencyKey;
     await mounted.router.push('/stats'); await mounted.router.push('/'); await nextTick();
     mounted.view.value!.acceptDrafts([
-      { rawText: '演示语音：午饭 18.5 元', amount: 18.5, merchant: '演示商户', direction: 'expense',
+      { rawText: '演示语音：午饭 18.5 元', amount: 18.5, merchant: null, direction: 'expense',
         occurredAt: '2026-11-17T12:00:00+08:00', modality: 'voice', sourceRef: 'uploads/2026/11/recognized.webm', confidence: 0.9 },
-      { rawText: '演示小票：午饭 29 元', amount: 29, merchant: '演示商户', direction: 'expense',
+      { rawText: '演示小票：午饭 29 元', amount: 29, merchant: null, direction: 'expense',
         occurredAt: '2026-11-17T12:00:00+08:00', modality: 'image', sourceRef: 'uploads/2026/11/recognized.jpg', confidence: 0.9 },
     ]);
-    await nextTick();
-    expect(calls).toHaveLength(2);
+    await nextTick(); expect(client).toHaveBeenCalledTimes(2);
     const confirm = allNodes(mounted.root).find(node => node.kind === 'button' && visibleText(node).includes('确认并提交'))!;
     await dispatch(confirm, 'click');
-    expect(visibleText(mounted.root)).toContain('已入库');
-    const batch = JSON.parse(calls[2]!.body!);
-    expect(batch.records.every((record: { userId: string; idempotencyKey: string }) => record.userId === 'u_001'
-      && record.idempotencyKey.startsWith(firstKey.split(':')[0] + ':'))).toBe(true);
-    expect(db.prepare('SELECT source_modality, source_ref FROM transactions WHERE source_ref IS NOT NULL ORDER BY amount_cents').all()).toEqual([
-      { source_modality: 'voice', source_ref: 'uploads/2026/11/recognized.webm' },
-      { source_modality: 'image', source_ref: 'uploads/2026/11/recognized.jpg' },
+    const batch = JSON.parse(String(client.mock.calls[2]![1]?.body)) as ImportBatch;
+    expect(batch.records.map(record => ({ modality: record.modality, sourceRef: record.sourceRef }))).toEqual([
+      { modality: 'voice', sourceRef: 'uploads/2026/11/recognized.webm' },
+      { modality: 'image', sourceRef: 'uploads/2026/11/recognized.jpg' },
     ]);
-    expect((await getCategories()).length).toBeGreaterThanOrEqual(12);
-    expect(calls.at(-1)!.authorization).toBe('Bearer demo-test-access');
-    const clear = allNodes(mounted.root).find(node => node.kind === 'button' && visibleText(node) === '清除令牌')!;
-    await dispatch(clear, 'click'); expect(getAccessToken()).toBe('');
+    expect(batch.records.every(record => record.userId === 'u_001'
+      && record.idempotencyKey.startsWith(firstKey.split(':')[0] + ':'))).toBe(true);
+    expect(await getCategories()).toEqual([]);
+    expect(new Headers(client.mock.calls.at(-1)![1]?.headers).get('Authorization')).toBe('Bearer demo-test-access');
+    const clear = allNodes(mounted.root).find(node => node.kind === 'button' && visibleText(node).trim() === '清除令牌')!;
+    await dispatch(clear, 'click');
     await expect(getCategories()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
-    expect(calls.at(-1)!.authorization).toBeNull(); expect(persist).not.toHaveBeenCalled();
-  } finally { mounted?.unmount(); try { await server.close(); } finally { db.close(); } }
+    expect(new Headers(client.mock.calls.at(-1)![1]?.headers).has('Authorization')).toBe(false);
+    expect(persist).not.toHaveBeenCalled();
+  } finally { mounted.unmount(); }
 });

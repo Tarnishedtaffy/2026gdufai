@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCaptureSession } from '../../src/modules/capture/index.ts';
-import type { ImportBatch, ImportResult } from '../../src/modules/capture/index.ts';
+import type { CaptureResult, ImportBatch } from '../../src/modules/capture/index.ts';
 import { context, draft, idGenerator, response } from './helpers.ts';
 
 describe('M1 对 M2 回执的边界处理', () => {
@@ -36,7 +36,7 @@ describe('M1 对 M2 回执的边界处理', () => {
     ['漏项', batch => ({ ...response(batch), results: response(batch).results.slice(0, 1) })],
     ['重复记录', batch => ({ ...response(batch), results: [response(batch).results[0], response(batch).results[0]] })],
     ['未知记录', batch => response(batch, [{ recordId: 'other_record' }])],
-    ['非法状态', batch => response(batch, [{ status: 'other' as ImportResult['status'] }])],
+    ['非法状态', batch => response(batch, [{ status: 'other' as CaptureResult['status'] }])],
     ['缺账单标识', batch => response(batch, [{ transactionId: null }])],
     ['非法反馈', batch => response(batch, [{ feedback: [{ field: 'amount', code: 'MISSING_AMOUNT',
       severity: 'other' as 'blocking' }] }])],

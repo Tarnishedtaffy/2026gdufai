@@ -1,5 +1,5 @@
 export { createCaptureSession } from './session.ts';
 export type {
   CaptureContext, CaptureDependencies, CaptureDraft, CaptureFeedback, CaptureMessage,
-  CaptureSession, CaptureSnapshot, ImportBatch, ImportRecord, ImportResult,
+  CaptureResult, CaptureSession, CaptureSnapshot, ImportBatch, ImportRecord,
 } from './types.ts';

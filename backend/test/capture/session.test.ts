@@ -113,4 +113,51 @@ describe('M1 用户确认流程', () => {
     expect(importBatch.mock.calls[1]![0].batchId).not.toBe(importBatch.mock.calls[0]![0].batchId);
     expect(final.records[0]!.result).toEqual(first.records[0]!.result);
   });
+
+  it('永久 400 后可明确放弃本地状态，下一笔不复用原身份或自动发送', async () => {
+    const failure = Object.assign(new Error('演示用户不匹配'), { code: 'INVALID_BATCH' });
+    const importBatch = vi.fn(async (batch: ImportBatch) => response(batch));
+    importBatch.mockRejectedValueOnce(failure);
+    const session = createCaptureSession({ importBatch, newId: idGenerator() });
+    const original = session.prepare(context, [draft()]).records[0]!.record;
+    expect((await session.submit()).phase).toBe('retry');
+    const originalBatch = importBatch.mock.calls[0]![0];
+    expect(session.discard()).toEqual({
+      phase: 'empty', sessionId: null, batchId: null, records: [], error: null,
+    });
+    expect(importBatch).toHaveBeenCalledTimes(1);
+    expect(() => session.update(original.recordId, { amount: 18 })).toThrow('找不到');
+    await expect(session.submit()).rejects.toThrow('请先准备');
+    const next = session.prepare(context, [draft()]).records[0]!.record;
+    expect(next.recordId).not.toBe(original.recordId);
+    expect(next.idempotencyKey).not.toBe(original.idempotencyKey);
+    expect(importBatch).toHaveBeenCalledTimes(1);
+    expect((await session.submit()).phase).toBe('complete');
+    expect(importBatch.mock.calls[1]![0].batchId).not.toBe(originalBatch.batchId);
+  });
+
+  it('请求仍在执行时禁止放弃，且原回执继续对应原批次', async () => {
+    const pending = deferred<unknown>();
+    const importBatch = vi.fn((_batch: ImportBatch) => pending.promise);
+    const session = createCaptureSession({ importBatch, newId: idGenerator() });
+    session.prepare(context, [draft()]);
+    const submission = session.submit();
+    const inProgress = session.getSnapshot();
+    expect(() => session.discard()).toThrow('提交');
+    expect(session.getSnapshot()).toEqual(inProgress);
+    await Promise.resolve();
+    pending.resolve(response(importBatch.mock.calls[0]![0]));
+    expect((await submission).records[0]!.result?.status).toBe('confirmed');
+    expect(importBatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('放弃不清除标识历史，故障 ID 生成器不能重新使用已放弃的记录身份', () => {
+    const importBatch = vi.fn();
+    const session = createCaptureSession({ importBatch, newId: () => 'same-record' });
+    session.prepare(context, [draft()]);
+    session.discard();
+    expect(() => session.prepare(context, [draft()])).toThrow('重复标识');
+    expect(session.getSnapshot().phase).toBe('empty');
+    expect(importBatch).not.toHaveBeenCalled();
+  });
 });

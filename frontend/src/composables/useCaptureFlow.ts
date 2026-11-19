@@ -51,6 +51,11 @@ export function createCaptureFlow(deps: CaptureUiDependencies) {
     return apply(() => { session.update(recordId, patch); });
   }
 
+  /** 仅清除本地草稿；提交中由共享流程拒绝，不向服务端发送撤销操作。 */
+  function discard(): boolean {
+    return apply(() => { session.discard(); });
+  }
+
   /** 显式确认或重试原载荷；跨账号时阻止复用之前的待提交记录。 */
   async function confirm(): Promise<void> {
     inputError.value = null;
@@ -71,7 +76,7 @@ export function createCaptureFlow(deps: CaptureUiDependencies) {
   }
 
   return {
-    snapshot, inputError, canPrepare, prepare, update, confirm,
+    snapshot, inputError, canPrepare, prepare, update, confirm, discard,
     setContextProvider: (provider: CaptureContextProvider | null) => { contextProvider.value = provider; },
   };
 }

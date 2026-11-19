@@ -55,11 +55,28 @@ describe('M1 根据真实 M2 反馈继续用户确认', () => {
     }
   });
 
-  it('真实 M2 拒绝退款，M1 提示作废原账单且不再次提交', async () => {
+  it('按已部署的退款契约展示真实 M2 反馈，兼容 #17 合并前后', async () => {
     const h = ledger();
     const initial = h.session.prepare(h.context, [h.draft({ rawText: '演示商品退款 12.50 元', direction: 'expense' })]);
     expect(h.batches).toHaveLength(0);
     const snapshot = await h.session.submit();
+    // #13 先合并；#17 的迁移新增 entry_type。两条契约分支分别在 main 和 #17 副本联调。
+    const neutralEntries = (h.db.pragma('table_info(transactions)') as { name: string }[])
+      .some(column => column.name === 'entry_type');
+    if (neutralEntries) {
+      expect(snapshot.phase).toBe('pending_followup');
+      expect(snapshot.records[0]!.messages[0]).toMatchObject({ code: 'MISSING_ORIGINAL_TRANSACTION',
+        severity: 'blocking', text: expect.stringContaining('原账单') });
+      expect(h.transactionCount()).toBe(0);
+      const second = await h.session.submit();
+      expect(second.phase).toBe('complete');
+      expect(second.records[0]!.messages).toContainEqual(expect.objectContaining({
+        code: 'ORIGINAL_NOT_FOUND_RECORDED', severity: 'warning', text: expect.stringContaining('不计入收支'),
+      }));
+      expect(h.transactionCount()).toBe(1);
+      expect(h.batches[1]!.records[0]!.idempotencyKey).toBe(initial.records[0]!.record.idempotencyKey);
+      return;
+    }
     expect(snapshot.phase).toBe('complete');
     expect(snapshot.records[0]!.result?.status).toBe('rejected');
     expect(snapshot.records[0]!.messages[0]).toMatchObject({

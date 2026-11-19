@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { CaptureDraft } from '@gduf/capture-flow';
 import { useCaptureFlow } from '../composables/useCaptureFlow';
 import { isMockEnabled } from '../api/request';
-import { normalizeIsoOffset } from '../utils/datetime';
+import { parseDateTime } from '../utils/datetime';
 import { yuanToCents, centsToYuanNumber } from '../utils/money';
 import CaptureDraftCard from '../components/capture/CaptureDraftCard.vue';
 import CaptureAttachmentEntry from '../components/capture/CaptureAttachmentEntry.vue';
 
-const { snapshot, inputError, canPrepare, prepare, update, confirm } = useCaptureFlow();
+const { snapshot, inputError, canPrepare, prepare, update, confirm, discard } = useCaptureFlow();
 const showEntry = ref(snapshot.value.phase === 'empty');
 const rawText = ref('');
 const amountInput = ref('');
@@ -17,10 +17,13 @@ const occurredAtInput = ref('');
 const direction = ref<CaptureDraft['direction']>(null);
 const formError = ref<string | null>(null);
 const invalidRows = ref<Record<string, string>>({});
+const discardRequested = ref(false);
+const discardAcknowledged = ref(false);
 const busy = computed(() => snapshot.value.phase === 'submitting');
 const retrying = computed(() => snapshot.value.phase === 'retry');
 const pendingCount = computed(() => snapshot.value.records.filter(row => !row.result || row.result.status === 'pending_followup').length);
 const isMock = isMockEnabled();
+watch(() => snapshot.value.phase, () => { discardRequested.value = false; discardAcknowledged.value = false; });
 
 /** 手工录入只生成待确认草稿；金额不静默舍入，未知时间不补为当前时间。 */
 function prepareManual(): void {
@@ -32,11 +35,11 @@ function prepareManual(): void {
   }
   const cents = yuanToCents(rawAmount);
   if (rawAmount && (cents === null || !Number.isSafeInteger(cents))) { formError.value = '金额超出可处理范围，请核对。'; return; }
-  const occurredAt = normalizeIsoOffset(occurredAtInput.value);
-  if (occurredAt && Number.isNaN(Date.parse(occurredAt))) { formError.value = '请核对发生时间。'; return; }
+  const time = parseDateTime(occurredAtInput.value);
+  if (time.error) { formError.value = time.error; return; }
   acceptDrafts([{
     amount: centsToYuanNumber(cents), merchant: merchantInput.value.trim() || null,
-    occurredAt, direction: direction.value, confidence: null,
+    occurredAt: time.value, direction: direction.value, confidence: null,
     rawText: rawText.value, modality: 'text', sourceRef: null,
   }]);
 }
@@ -66,6 +69,12 @@ function newEntry(): void {
   showEntry.value = true;
   rawText.value = ''; amountInput.value = ''; merchantInput.value = ''; occurredAtInput.value = ''; direction.value = null;
   formError.value = null; invalidRows.value = {};
+  discardRequested.value = false; discardAcknowledged.value = false;
+}
+
+/** 放弃只作用于本地；必须先阅读提示并明确确认，不能取消提交中的请求。 */
+function discardRetry(): void {
+  if (retrying.value && !busy.value && discardAcknowledged.value && discard()) newEntry();
 }
 
 defineExpose({ acceptDrafts });
@@ -94,7 +103,18 @@ defineExpose({ acceptDrafts });
       <p v-if="snapshot.phase === 'draft'" class="hint">请核对以下 {{ snapshot.records.length }} 条草稿。点击确认之前不会提交。</p>
       <p v-if="snapshot.phase === 'pending_followup'" class="hint">请补充对应记录；已完成的记录不会重复提交。</p>
       <CaptureDraftCard v-for="(row, index) in snapshot.records" :key="row.record.recordId" :row="row" :index="index" :locked="busy || retrying" @change="edit" />
-      <div v-if="snapshot.error" class="alert" role="alert">{{ snapshot.error }}。请重试原提交，暂不能修改或新建记录。</div>
+      <div v-if="snapshot.error" class="alert" role="alert">{{ snapshot.error }}。可修正访问令牌后重试原提交；原草稿暂不能修改。</div>
+      <div v-if="retrying" class="alert" role="alert">
+        <strong>服务端可能已入库，请先到账单一览核对。</strong>
+        <RouterLink to="/transactions">查看账单一览</RouterLink>
+        <p>放弃仅清除本地草稿，不会撤销服务端账单；再次录入前请核对，避免重复记账。</p>
+        <button v-if="!discardRequested" type="button" @click="discardRequested = true">放弃本地草稿</button>
+        <template v-else>
+          <label><input id="cap-discard-confirm" v-model="discardAcknowledged" type="checkbox" />我已了解可能已入库，确认只放弃本地草稿。</label>
+          <button type="button" :disabled="!discardAcknowledged || busy" @click="discardRetry">确认放弃本地草稿</button>
+          <button type="button" @click="discardRequested = false; discardAcknowledged = false">继续保留</button>
+        </template>
+      </div>
       <div class="actions">
         <button v-if="snapshot.phase !== 'complete'" class="primary" type="button" :disabled="busy || !canPrepare || Object.keys(invalidRows).length > 0" @click="confirm">
           {{ busy ? '提交中…' : retrying ? '重试原提交' : snapshot.phase === 'pending_followup' ? `确认补充并重发 ${pendingCount} 条` : `确认并提交 ${pendingCount} 条` }}

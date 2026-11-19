@@ -12,7 +12,7 @@ const occurredAt = ref('');
 const direction = ref<CaptureDraft['direction']>(null);
 const error = ref<string | null>(null);
 const fieldErrors = ref<Partial<Record<CaptureEditableField, string>>>({});
-const statusText = { confirmed: '已入库', pending_followup: '待追问', duplicate: '已关联原账单', rejected: '已放弃处理' };
+const statusText = { confirmed: '已入库', pending_followup: '待追问', duplicate: '已记过，沿用原账单', rejected: '已放弃处理' };
 const editable = computed(() => !props.locked && (!props.row.result || props.row.result.status === 'pending_followup'));
 
 watch([() => props.row.record.recordId, () => props.row.result?.status, () => props.row.result?.transactionId], () => {

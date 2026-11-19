@@ -89,7 +89,7 @@ export async function importBatch(batch: ImportBatch): Promise<ImportResult> {
         body: JSON.stringify(batch),
       });
   if (!Array.isArray(res.results) || res.results.length === 0) {
-    throw createApiError('INVALID_BATCH', '入站响应缺少有效的 results 列表');
+    throw createApiError('INVALID_RESPONSE', '入站响应缺少有效的 results 列表');
   }
   return res;
 }

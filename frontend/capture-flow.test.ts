@@ -146,4 +146,22 @@ describe('M1 确认界面流程适配', () => {
     expect(flow.snapshot.value.records[0]?.result?.status).toBe('confirmed');
     expect(flow.snapshot.value.records[0]?.record.idempotencyKey).toBe(pending.record.idempotencyKey);
   });
+
+  it('提交中不能放弃；失败后显式放弃只清本地状态，新草稿不复用旧幂等键', async () => {
+    let reject!: (error: Error) => void;
+    const client = vi.fn((_batch: ImportBatch) => new Promise<unknown>((_resolve, fail) => { reject = fail; }));
+    const flow = setup(client);
+    flow.prepare([draft]);
+    const oldKey = flow.snapshot.value.records[0]!.record.idempotencyKey;
+    const pending = flow.confirm(); await Promise.resolve();
+    expect(flow.discard()).toBe(false);
+    expect(flow.snapshot.value.phase).toBe('submitting');
+    reject(new Error('虚构网络错误')); await pending;
+    expect(flow.snapshot.value.phase).toBe('retry');
+    expect(flow.discard()).toBe(true);
+    expect(flow.snapshot.value).toMatchObject({ phase: 'empty', records: [], error: null });
+    expect(client).toHaveBeenCalledTimes(1);
+    expect(flow.prepare([draft])).toBe(true);
+    expect(flow.snapshot.value.records[0]!.record.idempotencyKey).not.toBe(oldKey);
+  });
 });

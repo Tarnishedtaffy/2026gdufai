@@ -17,6 +17,14 @@ export type FeedbackCode =
   | 'TIME_DEFAULTED_TO_CHAT_TIME'
   | 'DIRECTION_FORCED_BY_CATEGORY'
   | 'DUPLICATE_RECORD'
+  | 'MISSING_ORIGINAL_TRANSACTION'
+  | 'ORIGINAL_NOT_FOUND'
+  | 'REFUND_RECORDED_NEUTRAL'
+  | 'REPAYMENT_RECORDED_NEUTRAL'
+  | 'ORIGINAL_NOT_FOUND_RECORDED'
+  | 'REFUND_EXCEEDS_ORIGINAL'
+  | 'PARTIAL_REFUND_AS_INCOME'
+  // v1.2 兼容码；新版本退款处理使用上面的分层反馈。
   | 'REFUND_NOT_SUPPORTED';
 
 export type HttpErrorCode =
@@ -44,6 +52,13 @@ export const feedbackText: Record<FeedbackCode, string> = {
   TIME_DEFAULTED_TO_CHAT_TIME: '未识别到发生时间，已默认使用发送时间',
   DIRECTION_FORCED_BY_CATEGORY: '已根据所选类别自动修正收支方向',
   DUPLICATE_RECORD: '检测到重复提交，已直接关联已有账单',
+  MISSING_ORIGINAL_TRANSACTION: '请确认这笔退款或还款对应的原账单。',
+  ORIGINAL_NOT_FOUND: '没找到可匹配的原账单，请到账单一览核对。',
+  REFUND_RECORDED_NEUTRAL: '退款已记录且不计入收支，请到账单一览作废原账单。',
+  REPAYMENT_RECORDED_NEUTRAL: '还款已记录且不计入收支，请到账单一览作废原贷款账单。',
+  ORIGINAL_NOT_FOUND_RECORDED: '没找到原账单，已归入其他或其他收入，且不计入收支。',
+  REFUND_EXCEEDS_ORIGINAL: '退款金额高于原账单，尚未入库，请核对退款金额。',
+  PARTIAL_REFUND_AS_INCOME: '已按部分退款计入收入。',
   REFUND_NOT_SUPPORTED: '暂不支持退款或负数入账',
 };
 

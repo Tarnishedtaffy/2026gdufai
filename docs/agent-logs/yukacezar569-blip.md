@@ -94,3 +94,34 @@
   - 本机没有 Docker；本地未执行 Compose，推送后检查 PR CI 的 Node 22 验证和 Docker build/smoke
 - **人工审核**：用户已授权本次修复与更新 PR；独立代理复核暂未发现阻断，负责人正式复审仍待完成，不代填认可或合并
 - **遗留问题**：#6 的真实抽取、OCR/ASR 和上传尚待对接；内部交接提案与前端/infra 归属仍需相应负责人认可；M3 不属于此次改动
+
+### LOG-yukacezar569-blip-20261119-01
+
+- **时间**：2026-11-19 12:58（+08:00）
+- **工具/模型**：Codex / GPT-6，含并行修复、真实双版本联调与独立复核
+- **模块 / 分支 / PR**：M1 / `feat/m1-confirmation-followup` / #13（Refs #7）
+- **任务**：按 `ba94f05` 最新复审补齐未决提交退出、金额上界、类型命名及 #17 兼容后更新原 PR
+- **关键提示词**：
+  - 用户提供最新 Request changes，要求修改后重新上传
+  - 保留已验证的会话/Bearer 链路，不伪造上传、不代改 M2 业务、不合并主仓库
+- **代理做了什么**：
+  - 核对主仓库仍为 `e7180fe`、#17 仍开放且 head 为 `e1a160f`，当前分支无需 rebase 改写
+  - `CaptureSession.discard()` 仅清本地草稿与重试状态；提交中禁止调用，保留 ID 历史，不撤销服务端。界面先提示到账单核对，再经勾选和明确确认放弃；取消保留原载荷
+  - 识别草稿边界新增安全整数分上界；单条结果类型改为 `CaptureResult`，节号统一用 §；零和负数按现行契约交 M2 判断
+  - 统一手工/卡片日期校验，修正 duplicate 文案；API 客户端新增 `INVALID_RESPONSE` / `HTTP_ERROR`，保留真正的 M2 业务码
+  - 前端应用回归改为纯 renderer + API stub，移除后端源码/SQLite/socket 依赖；真实 HTTP/SQLite 验证保留在 backend，补永久 400 放弃与回执丢失后不撤销账单回归
+  - M1 与前端预兼容 #17 最新 7 个迁移反馈码，保留 v1.2 旧码；退款真实用例与反馈表覆盖适配两版，避免旧 11 码全等断言阻断合并
+  - #6 描述补充上传接口契约确认、sourceRef 回填、modality 交接与真实服务验收；创建 #20 跟踪 M2 API 金额边界，未越界修改 M2 校验
+- **决策**：
+  - 采用 reviewer 允许的顺序②：#13 先合、#17/#18 后迁移；本 PR 仅预兼容反馈文案，不发送 originalTransactionId，不实现 entryType 列表或中性 mock，不声称多模态已通
+  - 将当前 M1 测试分别与主仓库 M2、临时 #17 精确 9 文件源码副本联调；临时 M2 源码与试验没有混入分支。退款探针仅在测试 transport 注入原单字段，不代表产品已支持匹配选择
+  - 本轮业务修复未改 infra/workspace/依赖，后续跨构建改动按 reviewer 建议独立提交；历史日志不改写
+- **验证**：
+  - 先复现 discard 缺失、越界金额放行及前端错误归类等失败，再修复；真实 M2 的永久 400 放弃后可重新准备，已入库丢回执后放弃仍保留原账单且不发撤销请求
+  - `corepack pnpm install --frozen-lockfile --offline`、`corepack pnpm -r typecheck`、`corepack pnpm -r lint` 均通过
+  - `corepack pnpm -r test`：backend 22 文件 162 项、frontend 10 文件 64 项，共 226 项通过；真实 loopback HTTP 在获准环境执行
+  - 正式 v1.2 capture 全组 80/80；临时 #17 `e1a160f` 同组 80/80；额外真实 SQLite 探针覆盖全部 7 个新码、部分退款收入、超额不入库及第三次拒绝
+  - `VITE_USE_MOCK=false corepack pnpm --filter frontend build` 通过，81 modules；`git diff --check` 通过；两位独立代理最终只读复核未发现阻断
+  - 本机 Node v24.18.0、pnpm 12.21.0，无 Docker；本次提交的 Node 22 与 Docker 检查推送后由 CI 验证，不沿用旧 head 的绿色结果
+- **人工审核**：用户已授权修改与重新上传；负责人正式复审待完成，未代填通过或合并
+- **遗留问题**：#20 的 M2 金额守卫、#6 上传/真实识别、#18 的完整 v1.3 界面迁移仍待相应负责人；M3 不属于此次修复

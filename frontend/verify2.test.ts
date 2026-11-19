@@ -3,6 +3,7 @@ import { mockImportBatch } from './src/mock/import';
 import { mockGetStats } from './src/mock/stats';
 import { mockListTransactions, mockGetBudgets, mockGetCategories } from './src/mock/db';
 import type { ImportRecord, FeedbackCode } from './src/types/contract';
+import { contractFeedbackCodes } from './test-support/feedback-contract';
 
 const base = {
   userId: 'u_demo', amount: 30, merchant: null,
@@ -18,11 +19,11 @@ const batch = (id: string, key: string, patch: Partial<ImportRecord> = {}) => ({
 
 describe('B1 反馈码对齐契约', () => {
   it('反馈码集合', async () => {
-    const contractCodes = ['MISSING_AMOUNT','MISSING_TIME','FUTURE_TIME','MISSING_DIRECTION','CATEGORY_KIND_MISMATCH','LOW_CONFIDENCE_CATEGORY','MERCHANT_DEFAULTED','TIME_DEFAULTED_TO_CHAT_TIME','DIRECTION_FORCED_BY_CATEGORY','DUPLICATE_RECORD','REFUND_NOT_SUPPORTED'];
+    const contractCodes = contractFeedbackCodes();
+    expect(contractCodes.length).toBeGreaterThan(0);
     const { feedbackText } = await import('./src/types/contract');
     const keys = Object.keys(feedbackText).sort();
-    console.log('B1 反馈码数量=', keys.length, '| 与契约集合全等=', JSON.stringify(keys) === JSON.stringify([...contractCodes].sort()));
-    for (const c of contractCodes) if (!keys.includes(c)) console.log('  缺失:', c);
+    expect(keys).toEqual(expect.arrayContaining(contractCodes));
   });
 });
 

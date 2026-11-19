@@ -31,6 +31,15 @@ export function createCaptureSession(deps: CaptureDependencies): CaptureSession 
     if (pendingBatch || inFlight) throw new Error('原提交结果尚未确认，请先重试原提交。');
   }
 
+  /** 仅清理本地状态，不向 M2 发请求或撤销账单；保留 ID 历史以防新一笔复用旧身份。 */
+  const discard: CaptureSession['discard'] = () => {
+    if (inFlight) throw new Error('提交仍在进行，请等待本次请求结束后再放弃本地记录。');
+    context = null;
+    pendingBatch = null;
+    state = { phase: 'empty', sessionId: null, batchId: null, records: [], error: null };
+    return getSnapshot();
+  };
+
   const prepare: CaptureSession['prepare'] = (value, drafts) => {
     assertResolved();
     if (state.phase === 'pending_followup') throw new Error('请先处理当前待追问记录。');
@@ -92,5 +101,5 @@ export function createCaptureSession(deps: CaptureDependencies): CaptureSession 
     return inFlight;
   };
 
-  return { prepare, update, submit, getSnapshot };
+  return { prepare, update, submit, discard, getSnapshot };
 }

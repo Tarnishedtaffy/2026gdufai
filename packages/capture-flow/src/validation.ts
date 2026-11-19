@@ -1,4 +1,4 @@
-import type { CaptureContext, CaptureDraft, CaptureFeedback, ImportBatch, ImportResult } from './types.ts';
+import type { CaptureContext, CaptureDraft, CaptureFeedback, CaptureResult, ImportBatch } from './types.ts';
 
 const DIRECTIONS = ['expense', 'income'];
 const STATUSES = ['confirmed', 'pending_followup', 'duplicate', 'rejected'];
@@ -60,6 +60,10 @@ export function readDraft(value: unknown): CaptureDraft {
     || !/^-?\d+(?:\.\d{1,2})?$/.test(String(amount)))) {
     throw new Error('金额必须是最多两位小数的元数值，缺失时使用 null。');
   }
+  // 这里只校验安全表示范围，不转换或改写元金额；0/负数仍由 M2 按契约 §1.3 返回 MISSING_AMOUNT。
+  if (amount !== null && !Number.isSafeInteger(Math.round(amount * 100))) {
+    throw new Error('金额超出可处理范围，请核对。');
+  }
   if (!['text', 'voice', 'image'].includes(String(data.modality))) throw new Error('输入形态无效。');
   const sourceRef = nullableText(data.sourceRef, '源文件引用');
   if (sourceRef !== null && /^\s*data:/i.test(sourceRef)) throw new Error('源文件引用不能内联文件内容。');
@@ -105,21 +109,21 @@ function readFeedback(value: unknown): CaptureFeedback {
   return feedback;
 }
 
-function readResult(value: unknown): ImportResult {
+function readResult(value: unknown): CaptureResult {
   const data = object(value);
   if (!STATUSES.includes(String(data.status)) || !Array.isArray(data.feedback)) throw new Error('M2 处理结果无效。');
   const transactionId = nullableText(data.transactionId, '账单标识');
   if ((data.status === 'confirmed' || data.status === 'duplicate') && !transactionId) {
     throw new Error('M2 成功结果缺少账单标识。');
   }
-  let category: ImportResult['category'] = null;
+  let category: CaptureResult['category'] = null;
   if (data.category !== null && data.category !== undefined) {
     const item = object(data.category), kind = direction(item.kind);
     if (!Number.isInteger(item.id) || Number(item.id) <= 0 || !kind) throw new Error('M2 类别数据无效。');
     category = { id: Number(item.id), name: requiredText(item.name, '类别名称'), kind };
   }
   return {
-    recordId: requiredText(data.recordId, '记录标识'), status: data.status as ImportResult['status'],
+    recordId: requiredText(data.recordId, '记录标识'), status: data.status as CaptureResult['status'],
     transactionId, category, direction: direction(data.direction),
     occurredAt: nullableTime(data.occurredAt, 'M2 发生时间'), confidence: confidence(data.confidence),
     feedback: data.feedback.map(readFeedback),
@@ -127,7 +131,7 @@ function readResult(value: unknown): ImportResult {
 }
 
 /** 整批检查完成才应用结果，防止错批、漏项或重复项把回执配给另一笔。 */
-export function readResponse(value: unknown, batch: ImportBatch): ImportResult[] {
+export function readResponse(value: unknown, batch: ImportBatch): CaptureResult[] {
   const data = object(value);
   if (data.error !== undefined) {
     const error = object(data.error);

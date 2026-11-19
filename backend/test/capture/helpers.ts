@@ -1,4 +1,4 @@
-import type { CaptureContext, CaptureDraft, ImportBatch, ImportResult } from '../../src/modules/capture/index.ts';
+import type { CaptureContext, CaptureDraft, CaptureResult, ImportBatch } from '../../src/modules/capture/index.ts';
 
 export const context: CaptureContext = {
   sessionId: 'session_demo', userId: 'u_demo', sentAt: '2026-11-17T09:00:00+08:00', chatAt: null,
@@ -11,10 +11,10 @@ export function draft(patch: Partial<CaptureDraft> = {}): CaptureDraft {
   };
 }
 
-export function response(batch: ImportBatch, patches: Partial<ImportResult>[] = []) {
+export function response(batch: ImportBatch, patches: Partial<CaptureResult>[] = []) {
   return {
     batchId: batch.batchId,
-    results: batch.records.map((record, index): ImportResult => ({
+    results: batch.records.map((record, index): CaptureResult => ({
       recordId: record.recordId, status: 'confirmed', transactionId: `tx_${record.recordId}`,
       direction: 'expense', occurredAt: '2026-11-17T08:00:00+08:00', category: null,
       confidence: null, feedback: [], ...patches[index],

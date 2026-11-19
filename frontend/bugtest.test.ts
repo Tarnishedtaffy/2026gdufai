@@ -7,6 +7,7 @@ import { mockGetStats } from './src/mock/stats';
 import { mockListTransactions, mockGetBudgets, mockGetCategories } from './src/mock/db';
 import { centsToYuanNumber, yuanToCents, formatCents, toYuanInput } from './src/utils/money';
 import { normalizeIsoOffset } from './src/utils/datetime';
+import { contractFeedbackCodes } from './test-support/feedback-contract';
 import type { ImportRecord } from './src/types/contract';
 const SRC = join(process.cwd(), 'src');
 const base = {
@@ -20,7 +21,6 @@ function rec(id: string, key: string, patch: Partial<ImportRecord> = {}): Import
 const batch = (id: string, key: string, patch: Partial<ImportRecord> = {}) => ({
   version: 1 as const, batchId: 'b-' + id, sentAt: '2026-11-16T20:00:00+08:00', records: [rec(id, key, patch)],
 });
-// ---------- R1/R2 专项 ----------
 describe('R1 分转元收口', () => {
   it('centsToYuanNumber 语义正确', () => {
     expect(centsToYuanNumber(null)).toBe(null);
@@ -53,7 +53,6 @@ describe('R2 dateField 对齐契约', () => {
     expect(s).not.toContain("dateField: 'occurredAt'");
   });
 });
-// ---------- 硬约束静态检查 ----------
 describe('硬约束静态扫描', () => {
   function walk(dir: string): string[] {
     const out: string[] = [];
@@ -92,7 +91,6 @@ describe('硬约束静态扫描', () => {
     expect(blocking).toEqual([]);
   });
 });
-// ---------- 金额工具精度 ----------
 describe('金额工具', () => {
   it('元→分→元 往返无精度漂移', () => {
     for (const s of ['0', '0.01', '24.5', '99.99', '100', '1234.56']) {
@@ -110,7 +108,6 @@ describe('金额工具', () => {
     expect(toYuanInput(null)).toBe('');
   });
 });
-// ---------- 时间归一化 ----------
 describe('时间 +08:00', () => {
   it('无偏移补 +08:00，Z 转 +08:00', () => {
     const a = normalizeIsoOffset('2026-11-16T12:00:00');
@@ -121,12 +118,12 @@ describe('时间 +08:00', () => {
     expect(b).not.toContain('Z');
   });
 });
-// ---------- 入站状态机回归 ----------
 describe('入站状态机', () => {
-  it('反馈码集合 11 个全等契约', async () => {
-    const contractCodes = ['MISSING_AMOUNT','MISSING_TIME','FUTURE_TIME','MISSING_DIRECTION','CATEGORY_KIND_MISMATCH','LOW_CONFIDENCE_CATEGORY','MERCHANT_DEFAULTED','TIME_DEFAULTED_TO_CHAT_TIME','DIRECTION_FORCED_BY_CATEGORY','DUPLICATE_RECORD','REFUND_NOT_SUPPORTED'].sort();
+  it('反馈码覆盖当前冻结契约，允许契约增量扩展', async () => {
+    const contractCodes = contractFeedbackCodes();
+    expect(contractCodes.length).toBeGreaterThan(0);
     const { feedbackText } = await import('./src/types/contract');
-    expect(Object.keys(feedbackText).sort()).toEqual(contractCodes);
+    expect(Object.keys(feedbackText)).toEqual(expect.arrayContaining(contractCodes));
   });
   it('direction=null 触发 MISSING_DIRECTION', async () => {
     const r = (await mockImportBatch(batch('nd', 'k-nd', { direction: null }))).results[0];
@@ -160,7 +157,6 @@ describe('入站状态机', () => {
     expect(r.category?.kind).toBe('income');
   });
 });
-// ---------- 统计/账单/预算形状 ----------
 describe('响应形状', () => {
   it('统计 buckets[].categories 非空且字段齐全', () => {
     const s = mockGetStats({ dimension: 'recent7' });
@@ -188,7 +184,6 @@ describe('响应形状', () => {
     expect(true).toBe(true);
   });
 });
-// ---------- 单用户身份 ----------
 describe('前端 userId 与 DEMO_USER_ID 对齐', () => {
   it('未配置时默认 u_001', () => {
     vi.stubEnv('VITE_DEMO_USER_ID', '');

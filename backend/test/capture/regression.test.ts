@@ -4,6 +4,28 @@ import type { ImportBatch } from '../../src/modules/capture/index.ts';
 import { context, draft, idGenerator, response } from './helpers.ts';
 
 describe('M1 草稿合并与附件引用回归', () => {
+  it.each([90071992547409.92, -90071992547409.92, Number.MAX_SAFE_INTEGER])(
+    '拒绝无法用安全整数分表示的金额 %s，且不修改已有草稿或调用 M2', amount => {
+      const importBatch = vi.fn();
+      const session = createCaptureSession({ importBatch, newId: idGenerator() });
+      const original = session.prepare(context, [draft()]);
+      expect(() => session.prepare(context, [draft({ amount })])).toThrow('金额超出');
+      expect(() => session.update(original.records[0]!.record.recordId, { amount })).toThrow('金额超出');
+      expect(session.getSnapshot()).toEqual(original);
+      expect(importBatch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([Number.MAX_SAFE_INTEGER / 100, -(Number.MAX_SAFE_INTEGER / 100), -12.5, 0, null])(
+    '安全边界内金额 %s 原样传递，零与负数留给 M2 按契约处理', async amount => {
+      const importBatch = vi.fn(async (batch: ImportBatch) => response(batch));
+      const session = createCaptureSession({ importBatch, newId: idGenerator() });
+      session.prepare(context, [draft({ amount })]);
+      await session.submit();
+      expect(importBatch.mock.calls[0]![0].records[0]!.amount).toBe(amount);
+    },
+  );
+
   it('补充中的 undefined 不会清除已确认字段，提交仍保留原值', async () => {
     const importBatch = vi.fn(async (batch: ImportBatch) => response(batch));
     const session = createCaptureSession({ importBatch, newId: idGenerator() });

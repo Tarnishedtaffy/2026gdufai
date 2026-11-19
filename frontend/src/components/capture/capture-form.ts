@@ -1,5 +1,5 @@
 import type { CaptureDraft } from '@gduf/capture-flow';
-import { normalizeIsoOffset } from '../../utils/datetime';
+import { parseDateTime } from '../../utils/datetime';
 import { centsToYuanNumber, yuanToCents } from '../../utils/money';
 
 export type CaptureEditableField = 'amount' | 'merchant' | 'direction' | 'occurredAt';
@@ -25,14 +25,6 @@ export function parseCaptureEdit(field: CaptureEditableField, input: string | nu
     if (raw && raw !== 'expense' && raw !== 'income') return { patch: null, error: '请核对收支方向。' };
     return { patch: { direction: raw === 'expense' || raw === 'income' ? raw : null }, error: null };
   }
-  const time = normalizeIsoOffset(raw);
-  if (raw && time === null) return { patch: null, error: '请核对发生时间，未知时留空。' };
-  if (time !== null) {
-    const instant = Date.parse(time);
-    // Date.parse 会把部分非法日期进位，往返核对以避免把 2 月 31 日静默变成 3 月。
-    if (Number.isNaN(instant) || normalizeIsoOffset(new Date(instant).toUTCString()) !== time) {
-      return { patch: null, error: '请核对发生时间，未知时留空。' };
-    }
-  }
-  return { patch: { occurredAt: time }, error: null };
+  const parsed = parseDateTime(raw);
+  return parsed.error ? { patch: null, error: parsed.error } : { patch: { occurredAt: parsed.value }, error: null };
 }

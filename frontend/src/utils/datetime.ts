@@ -38,6 +38,21 @@ export function normalizeIsoOffset(raw: string | null | undefined): string | nul
   return formatUtcMsAsPlus8(parsed);
 }
 
+/** 表单统一校验真实日历日期与时间；空字段保留 null，不推断发生时间。 */
+export function parseDateTime(input: string | null | undefined): { value: string | null; error: string | null } {
+  const raw = input?.trim() ?? '';
+  if (!raw) return { value: null, error: null };
+  const invalid = { value: null, error: '请核对发生时间，未知时留空。' };
+  const match = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/.exec(raw);
+  if (!match) return invalid;
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > (days[month - 1] ?? 0)) return invalid;
+  const value = normalizeIsoOffset(raw);
+  return value === null || Number.isNaN(Date.parse(value)) ? invalid : { value, error: null };
+}
+
 /**
  * 返回当前东八区时间（ISO-8601 +08:00），不产生 Z 结尾。
  */

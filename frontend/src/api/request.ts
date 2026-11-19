@@ -1,7 +1,7 @@
 import type { ApiErrorBody, HttpErrorCode } from '../types/contract';
 import { getAccessToken } from './access-token';
 
-export type ClientErrorCode = HttpErrorCode | 'NETWORK';
+export type ClientErrorCode = HttpErrorCode | 'NETWORK' | 'INVALID_RESPONSE' | 'HTTP_ERROR';
 
 export interface ApiRequestError extends Error {
   readonly code: ClientErrorCode;
@@ -72,22 +72,23 @@ export async function request<T>(path: string, config: RequestConfig = {}): Prom
   try {
     payload = await response.json();
   } catch {
-    throw createApiError('INVALID_BATCH', '服务端返回了非 JSON 数据');
+    throw createApiError(response.ok ? 'INVALID_RESPONSE' : 'HTTP_ERROR', response.ok
+      ? '服务端返回了非 JSON 数据' : `请求失败（HTTP ${response.status}，非 JSON 响应）`);
   }
 
   if (!response.ok) {
     const errBody = payload as Partial<ApiErrorBody>;
     const detail = errBody?.error;
     if (detail && typeof detail.code === 'string' && typeof detail.message === 'string') {
-      throw createApiError(detail.code as HttpErrorCode, detail.message, detail.field ?? null);
+      throw createApiError(detail.code as HttpErrorCode, detail.message, typeof detail.field === 'string' ? detail.field : null);
     }
-    throw createApiError('INVALID_BATCH', `请求失败（HTTP ${response.status}）`);
+    throw createApiError('HTTP_ERROR', `请求失败（HTTP ${response.status}）`);
   }
 
   const isArr = Array.isArray(payload);
   const isObj = typeof payload === 'object' && payload !== null && !isArr;
   if ((expectArray && !isArr) || (!expectArray && !isObj)) {
-    throw createApiError('INVALID_BATCH', '响应顶层数据结构与契约不符');
+    throw createApiError('INVALID_RESPONSE', '响应顶层数据结构与契约不符');
   }
   return payload as T;
 }

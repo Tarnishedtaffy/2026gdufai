@@ -14,7 +14,7 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-describe('M1 与当前 M2 契约 v1.2 的真实集成', () => {
+describe('M1 与当前 M2 基础契约的真实集成', () => {
   it.each([undefined, 'u_capture_custom'])('确认前不入库，确认后按服务端演示用户 %s 入库并能查出', async userId => {
     const h = ledger(userId === undefined ? {} : { DEMO_USER_ID: userId });
     expect(h.context.userId).toBe(userId ?? 'u_001');
