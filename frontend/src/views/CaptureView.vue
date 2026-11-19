@@ -65,7 +65,11 @@ function edit(recordId: string, patch: Partial<CaptureDraft> | null, error: stri
   invalidRows.value = errors;
 }
 
+/** 重新填写先清共享草稿；未决提交只能通过带风险确认的专用放弃入口处理。 */
 function newEntry(): void {
+  const phase = snapshot.value.phase;
+  if (phase !== 'empty' && phase !== 'draft' && phase !== 'complete') return;
+  if (phase !== 'empty' && !discard()) return;
   showEntry.value = true;
   rawText.value = ''; amountInput.value = ''; merchantInput.value = ''; occurredAtInput.value = ''; direction.value = null;
   formError.value = null; invalidRows.value = {};

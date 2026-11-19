@@ -1,3 +1,8 @@
+import type { CaptureFeedbackCode } from '@gduf/capture-flow';
+
+// 与确认流程复用唯一只读话术表；反馈码/文案变更统一在共享包维护。
+export { captureFeedbackText as feedbackText } from '@gduf/capture-flow';
+
 export type Direction = 'expense' | 'income';
 export type Modality = 'text' | 'voice' | 'image';
 export type ImportStatus = 'confirmed' | 'pending_followup' | 'duplicate' | 'rejected';
@@ -6,26 +11,7 @@ export type BudgetLevel = 'normal' | 'near' | 'over';
 export type StatsDimension = 'day' | 'month' | 'year' | 'recent7';
 export type StatsBasisDateField = 'occurred_date';
 
-export type FeedbackCode =
-  | 'MISSING_AMOUNT'
-  | 'MISSING_TIME'
-  | 'FUTURE_TIME'
-  | 'MISSING_DIRECTION'
-  | 'CATEGORY_KIND_MISMATCH'
-  | 'LOW_CONFIDENCE_CATEGORY'
-  | 'MERCHANT_DEFAULTED'
-  | 'TIME_DEFAULTED_TO_CHAT_TIME'
-  | 'DIRECTION_FORCED_BY_CATEGORY'
-  | 'DUPLICATE_RECORD'
-  | 'MISSING_ORIGINAL_TRANSACTION'
-  | 'ORIGINAL_NOT_FOUND'
-  | 'REFUND_RECORDED_NEUTRAL'
-  | 'REPAYMENT_RECORDED_NEUTRAL'
-  | 'ORIGINAL_NOT_FOUND_RECORDED'
-  | 'REFUND_EXCEEDS_ORIGINAL'
-  | 'PARTIAL_REFUND_AS_INCOME'
-  // v1.2 兼容码；新版本退款处理使用上面的分层反馈。
-  | 'REFUND_NOT_SUPPORTED';
+export type FeedbackCode = CaptureFeedbackCode;
 
 export type HttpErrorCode =
   | 'INVALID_BATCH'
@@ -40,27 +26,6 @@ export type HttpErrorCode =
   | 'BUDGET_CONFLICT'
   | 'INTERNAL_ERROR'
   | 'UNAUTHORIZED';
-
-export const feedbackText: Record<FeedbackCode, string> = {
-  MISSING_AMOUNT: '缺少金额，请补充消费或收入金额',
-  MISSING_TIME: '缺少发生时间，请补充日期时间',
-  FUTURE_TIME: '发生时间晚于当前时间，请核对',
-  MISSING_DIRECTION: '无法判断支出或收入方向，请明确指定',
-  CATEGORY_KIND_MISMATCH: '所选类别与收支方向不匹配',
-  LOW_CONFIDENCE_CATEGORY: '分类置信度较低，请确认类别是否正确',
-  MERCHANT_DEFAULTED: '未识别到商户名称，已使用默认值',
-  TIME_DEFAULTED_TO_CHAT_TIME: '未识别到发生时间，已默认使用发送时间',
-  DIRECTION_FORCED_BY_CATEGORY: '已根据所选类别自动修正收支方向',
-  DUPLICATE_RECORD: '检测到重复提交，已直接关联已有账单',
-  MISSING_ORIGINAL_TRANSACTION: '请确认这笔退款或还款对应的原账单。',
-  ORIGINAL_NOT_FOUND: '没找到可匹配的原账单，请到账单一览核对。',
-  REFUND_RECORDED_NEUTRAL: '退款已记录且不计入收支，请到账单一览作废原账单。',
-  REPAYMENT_RECORDED_NEUTRAL: '还款已记录且不计入收支，请到账单一览作废原贷款账单。',
-  ORIGINAL_NOT_FOUND_RECORDED: '没找到原账单，已归入其他或其他收入，且不计入收支。',
-  REFUND_EXCEEDS_ORIGINAL: '退款金额高于原账单，尚未入库，请核对退款金额。',
-  PARTIAL_REFUND_AS_INCOME: '已按部分退款计入收入。',
-  REFUND_NOT_SUPPORTED: '暂不支持退款或负数入账',
-};
 
 export interface ImportRecord {
   recordId: string;

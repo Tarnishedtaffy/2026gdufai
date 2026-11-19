@@ -43,3 +43,33 @@ it('duplicate 回执展示已记过并沿用原账单', () => {
   try { expect(visibleText(mounted.root)).toContain('已记过，沿用原账单'); }
   finally { mounted.unmount(); }
 });
+
+it.each([
+  ['REFUND_RECORDED_NEUTRAL', '退款已记录且不计入收支，原账单已自动作废或调整。'],
+  ['REPAYMENT_RECORDED_NEUTRAL', '还款已记录且不计入收支，原贷款账单已自动作废或调整。'],
+  ['ORIGINAL_AMOUNT_ADJUSTED', '原账单金额已自动调整为剩余金额。'],
+  ['REFUND_EXCESS_AS_INCOME', '原账单已自动作废，退款超出部分已计入收入。'],
+  ['REPAYMENT_EXCESS_AS_EXPENSE', '原贷款账单已自动作废，还款超出部分已计入支出。'],
+] as const)('%s 回执卡片展示自动处理后的实际语义，不再指示用户重复作废', async (code, expected) => {
+  vi.stubGlobal('document', { activeElement: null });
+  let serial = 0;
+  const session = createCaptureSession({ newId: () => `v14-${++serial}`, importBatch: async batch => ({
+    batchId: batch.batchId, results: batch.records.map(record => ({ recordId: record.recordId,
+      status: 'confirmed', transactionId: 'tx_v14_demo', direction: 'expense',
+      occurredAt: record.occurredAt, category: null, confidence: null,
+      feedback: [{ field: 'amount', code, severity: 'warning' }],
+    })),
+  }) });
+  session.prepare({ sessionId: 'v14-session', userId: 'u_001', sentAt: '2026-11-19T12:00:00+08:00', chatAt: null }, [{
+    rawText: '虚构 v1.4 回执', amount: 12, merchant: null, occurredAt: '2026-11-19T12:00:00+08:00',
+    direction: 'expense', confidence: null, modality: 'text', sourceRef: null,
+  }]);
+  const snapshot = await session.submit();
+  const mounted = mountUi(CaptureDraftCard, { row: snapshot.records[0], locked: false, index: 0 });
+  try {
+    const text = visibleText(mounted.root);
+    expect(text).toContain(expected);
+    expect(text).not.toContain('请到账单一览作废');
+    expect(text).not.toContain(`（${code}）`);
+  } finally { mounted.unmount(); }
+});

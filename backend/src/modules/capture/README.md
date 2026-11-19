@@ -88,9 +88,11 @@ Docker 前端使用真实 API。Compose 构建时将 `DEMO_USER_ID` 同步给前
 
 ### 与 #17 的合并顺序
 
-采用复审给出的第二种顺序：#13 先合，再由 #17 / #18 完成 v1.3 迁移。当前 main 仍是 v1.2，旧 `REFUND_NOT_SUPPORTED` 保留兼容；话术已预兼容 #17 最新的 7 个退款/还款反馈码，而非早期 review 的 5 个。退款真实用例按 `entry_type` 迁移是否存在分别断言旧版拒绝和新版追问/中性记录，两个分支分别联调。
+采用复审给出的第二种顺序：#13 先合，再由 #17 / #18 完成迁移。当前 main 仍是 v1.2；本轮兼容目标固定为 #17 `04fb0c08db898a4a6f066021eb7fd810647dd878` / 契约 v1.4 的 8 个退款/还款码，使用其契约与真实 M2 源码分别联调。退款真实用例按 `entry_type` 迁移是否存在分别断言旧版拒绝和新版追问/中性记录。
 
-本 PR 不发送尚未在 main 冻结的 `originalTransactionId`，不实现匹配选择、`entryType` 列表或中性记录 mock；这些由 #16 / #17 / #18 跟踪。恢复的是附件入口，上传、识别和 `sourceRef` 回填仍待 #6，不能据此标记多模态记账已通。
+`captureFeedbackText` 是前端和确认流程共用的唯一只读话术表，`CaptureFeedbackCode` 从表的键派生；后续改码不再维护两份副本。v1.4 的中性记录提示原账单已由服务端自动作废或调整，并解释剩余金额及超额部分的收入/支出。`REFUND_NOT_SUPPORTED` 仅兼容 v1.2，`REFUND_EXCEEDS_ORIGINAL` / `PARTIAL_REFUND_AS_INCOME` 仅保留为历史 v1.3 回执解释，不当作现行语义；旧日志中的 7 码 / `e1a160f` 验证只代表当时版本。
+
+本 PR 不发送尚未在 main 冻结的 `originalTransactionId`，不实现匹配选择、`entryType` 列表或中性记录 mock；这些由 #16 / #17 / #18 / #21 跟踪。恢复的是附件入口，上传、识别和 `sourceRef` 回填仍待 #6，不能据此标记多模态记账已通。
 
 未知反馈码会保留并展示，不擅自解释为入库、退款或时间修正。
 M1/M3 的对外对话和上传接口仍按团队的 contract-change 流程确认。
