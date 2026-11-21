@@ -250,6 +250,13 @@ export function validatePendingFeedbackHints(
         message: `存在未登记或已废弃的反馈码: ${String(hint?.code ?? '')}`
       };
     }
+    if (hint.field !== undefined && hint.field !== null && typeof hint.field !== 'string') {
+      return {
+        code: 'INVALID_CAPTURE_INPUT',
+        field: `pendingFeedback[${i}].field`,
+        message: 'pendingFeedback field 必须是字符串或 null。'
+      };
+    }
     if (
       hint.severity !== undefined &&
       hint.severity !== 'blocking' &&
