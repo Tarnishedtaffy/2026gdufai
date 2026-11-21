@@ -224,3 +224,43 @@
 - **验证**：`pnpm -r typecheck`、`pnpm -r lint`、`pnpm --filter @gduf/backend exec vitest run`、`pnpm --filter frontend exec vitest run`、`VITE_USE_MOCK=false pnpm --filter frontend build`、`git diff --check` 与 LF/EOF 检查全部通过。
 - **人工审核**：PR #30 修复已推送并回复 `@Tarnishedtaffy` 与 `@yukacezar569-blip`，待复审通过。
 - **遗留问题**：`#24` 对外路由与完整上传识别闭环、Ogg Opus 路由层时长校验以及 `CaptureResult` 新增字段待 `#23`（v1.5）合并与后续 PR 推进。
+
+### LOG-mianyoubiaoqing-20261121-01
+
+- **时间**：2026-11-21 12:38（+08:00）
+- **工具/模型**：Antigravity / Gemini
+- **模块 / 分支 / PR**：M1 / `feat/m1-capture-routes` / 本地暂存待发（关联 [#6](https://github.com/Tarnishedtaffy/2026gdufai/issues/6)、[#23](https://github.com/Tarnishedtaffy/2026gdufai/issues/23)、[#24](https://github.com/Tarnishedtaffy/2026gdufai/issues/24)）
+- **任务**：对齐契约 #23（v1.5）与 #24（v1.6）讨论口径，在 PR #30 合入后的 `upstream/main` 上预备实现 M1 `/api/capture/uploads` 与 `/api/capture/extract` 路由、`storage.ts` 有界分块读与过程问题文档更新。
+- **关键提示词**：
+  - 还有我们的工作吗？ / 一起做了吧 / pr30 已合并，继续吧（用户选择：拉取 `upstream/main` 切新分支提前写好 `/api/capture/*` 路由、测试与 `PROBLEMS_AND_GAPS.md`，本地验证后暂留待 `#24` 勾选冻结再提正式 PR）
+- **代理做了什么**：
+  - **GitHub 契约协作推进**：按 `@ONFAIL` 与 `@yukacezar569-blip` 达成的约束更新 [Issue #24](https://github.com/Tarnishedtaffy/2026gdufai/issues/24) 正文与标题为 **v1.6**（写入 §2.10 `mode`/`modality` 独立、`pendingFeedback` 调用前 `422 INVALID_CAPTURE_INPUT` 整次拒绝、`sourceRef` 双校验与不写库边界、§2.6 4 个最终错误码及 `#23` 版本依赖），@ 三位负责人复核勾选；并在 [Issue #23](https://github.com/Tarnishedtaffy/2026gdufai/issues/23) 补充 M1 识别端最终知悉确认。
+  - **受控上传存储再加固（`backend/src/modules/capture/storage.ts`）**：抽出共享句柄打开校验 `openVerifiedUpload` 与有界分块读 `readHandleBounded`（以 64 KiB 分块读取并在超限时立即中止，消除读取瞬间文件追加导致的瞬时超限内存分配）；新增并导出 `verifyCaptureUploadRef` 供 `followup` 抽取校验 `sourceRef` 存在且与模态一致而不读文件内容进内存。在 `normalizers.ts` 补充 `pendingFeedback[i].field` 字符串校验。
+  - **M1 对外 HTTP 路由实现（零新增 npm 依赖）**：在 `backend/src/shared/errors.ts` 新增 4 个契约错误码；新增 `backend/src/modules/capture/routes.ts` 注册 `POST /api/capture/uploads`（作用域流式受限 `multipart/form-data` 解析器，上限 15 MiB + 128 KiB 封装头，转调 `saveCaptureUpload` 返回 `201`，严格区分 `400/413/415 INVALID_UPLOAD`）与 `POST /api/capture/extract`（区分 `mode` 与 `modality`，`followup` 禁止改写原有 `modality`，验证 `sourceRef` 并严禁写库，精确映射 `CaptureFailureCode` 到 `400/413/415/422/502/503`）；在 `backend/src/app.ts` 接入 `AppDeps.captureExtractor`（缺省时安全回退为 `loadAiConfig({})` + `createOpenAiCompatibleProvider`）并注册 `registerCaptureRoutes`。
+  - **文档与测试**：新增 `backend/test/capture/routes.test.ts`（覆盖 401 鉴权、>1 MiB 合法语音上传、大小/魔数/缺字段错误映射、`mode`/`modality` 冲突、`pendingFeedback` 422 且 0 AI 调用、空识别 422、AI 未配置 503 与上游 502、DeepSeek ASR 超 120s 413、HTTP 上传→抽取→`capture-flow` 确认→M2 落库完整闭环）并在 `multimodal-pipeline.test.ts` 补充多分块读取与 `verifyCaptureUploadRef` 测试；在 `docs/PROBLEMS_AND_GAPS.md` 追加 `P-003`–`P-006` 与未完成项；在 `README.md` 补充 `UPLOAD_DIR` 真实目录与 Linux/Windows 符号链接防护差异说明。
+- **决策**：
+  - `POST /api/capture/uploads` 在不新增 `@fastify/multipart` 依赖的前提下，通过路由作用域 `addContentTypeParser('multipart/form-data', { bodyLimit })` 流式累加字节并在超限时立刻终止，再由 Node 22 原生 `Response.formData()` 解析校验单文件，保持 `backend/package.json` 与 Docker 镜像依赖面不变。
+  - 遵照 `AGENTS.md` §2 与用户选择，本次仅提交在本地 `feat/m1-capture-routes` 分支，等待 `#24` 获契约维护方与前端负责人勾选冻结（并视情况同步 `docs/contracts/module2-interface-v1.md` v1.6 正文）后再发起正式 PR。
+- **验证**：`pnpm -r typecheck`、`pnpm -r lint`、`pnpm --filter @gduf/backend exec vitest run`、`pnpm --filter frontend exec vitest run`、`VITE_USE_MOCK=false pnpm --filter frontend build`、`git diff --check` 与 LF/EOF 检查全部通过。
+- **人工审核**：代码与测试已在本地分支完成自验，待用户确认是否先行推 Draft PR 或等 `#24` 冻结后推正式 PR。
+- **遗留问题**：`docs/contracts/module2-interface-v1.md` v1.6 正文待 `#24`（并顺接 `#23` v1.5）正式冻结后由契约组或在对应 PR 中落盘；前端 `CaptureAttachmentEntry.vue` 对 `/api/capture/*` 的接入与浏览器端到端验收待后端路由与前端联调推进。
+
+### LOG-mianyoubiaoqing-20261121-02
+
+- **时间**：2026-11-21 16:22（+08:00）
+- **工具/模型**：Antigravity / Gemini
+- **模块 / 分支 / PR**：M1 / `feat/m1-capture-routes` / [#35](https://github.com/Tarnishedtaffy/2026gdufai/pull/35)（Draft）
+- **任务**：回应 `#24` `@yukacezar569-blip` 正文补充意见并推送 Draft PR #35；随后按 `@Tarnishedtaffy` 在 PR #35 初审的 P1 与 P3 意见完成修改、补测并回复。
+- **关键提示词**：
+  - 2 吧（推送并创建 Draft PR #35）
+  - 方案 B 吧（P1 选择先把反馈码白名单回退对齐当前 `main` 的 v1.4 18 码，并同步完成初审全部 P3）
+- **代理做了什么**：
+  - **同步 `#24` 与发起 Draft PR #35**：在 `#24` 正文 §2.10.2 与 §2.6 补充明确「`draft` 校验顶层 `modality`、`followup` 校验 `currentDraft.modality` 且不要求顶层 `modality`」，回复 `@yukacezar569-blip`；推送 `feat/m1-capture-routes` 至 fork 并发起 Draft PR #35。
+  - **P1（方案 B）**：按 `#24` §2.10.2 回退兜底原则与用户确认的方案 B，从 `backend/src/modules/capture/normalizers.ts` `ACTIVE_CONTRACT_FEEDBACK_CODES` 暂时移除尚未并入 `main` 的 `#23` v1.5 四个反馈码（严格对齐当前 `main` §1.5 的 18 个现行码），并将 `followup-extraction.test.ts` 与 `routes.test.ts` 改为断言这 4 个未合并码在当前 `main` 基线下被 422 拒绝、同时放行现行 v1.4 码。
+  - **P3 全部收口**：在 `backend/src/modules/capture/routes.ts` 的 `multipart/form-data` 解析器补充有界缓冲（≈3 倍峰值 ≈45 MB/并发）设计注释；在 `mode: "draft"` 分支对 `pendingFeedback`、`followupText`、`currentDraft` 三个仅属 `followup` 阶段的字段严格返回 `422 INVALID_CAPTURE_INPUT`；在 `routes.test.ts` 补齐 `currentDraft.modality === 'text'` 携带非 null `sourceRef`（422）、`pendingFeedback[0].field` 非字符串（422）及 `draft` 模式拒绝追问字段的回归用例。
+- **决策**：
+  - P1 采用方案 B（对齐当前 `main` 18 码），使 PR #35 与 `#23`/`#32` 合入顺序解耦——一旦 `#24` 完成冻结确认即可独立合入，待 `#23`（v1.5）落地 `main` 后再单独补回 4 个新码。
+  - 确认 `buildApp` 缺省 `captureExtractor` 且未配 `config.ai` 时回退 `loadAiConfig({})` 返回 `503 AI_UPSTREAM_ERROR` 属于预期隔离设计。
+- **验证**：`pnpm -r typecheck`、`pnpm -r lint`、`pnpm --filter @gduf/backend exec vitest run`、`pnpm --filter frontend exec vitest run`、`VITE_USE_MOCK=false pnpm --filter frontend build`、`git diff --check` 与 LF/EOF 检查全部通过。
+- **人工审核**：Draft PR #35 已更新并回复 `@Tarnishedtaffy`；等待 `#24` 全部确认框勾选冻结后转为 Ready for Review。
+- **遗留问题**：`#23`（v1.5）合并至 `main` 后需在 M1 `ACTIVE_CONTRACT_FEEDBACK_CODES` 补回其 4 个贷款反馈码；`docs/contracts/module2-interface-v1.md` v1.6 与前端附件闭环待 `#24` 冻结后按计划推进。

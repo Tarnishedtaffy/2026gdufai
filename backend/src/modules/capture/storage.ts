@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, realpath, unlink, type FileHandle } from 'node:fs/promises';
 import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { toShanghaiDate } from '../../shared/time.ts';
 import { isControlledSourceRef } from './schema.ts';
@@ -8,6 +8,7 @@ import type { CaptureFailure, UploadSaveOutcome } from './types.ts';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
+const READ_CHUNK_BYTES = 64 * 1024;
 const NOFOLLOW_FLAG = fsConstants.O_NOFOLLOW ?? 0;
 
 interface MediaSpec {
@@ -287,13 +288,42 @@ export type ReadCaptureUploadOutcome =
     }
   | { readonly ok: false; readonly failure: CaptureFailure };
 
-/**
- * 根据受控 `sourceRef` 从 `uploadDir` 安全读取文件，防止路径穿越、父目录符号链接逃逸、多硬链接及 TOCTOU 替换。
- */
-export async function readCaptureUpload(
+/** 仅校验受控 sourceRef 是否存在且匹配预期模态的结果。 */
+export type VerifyCaptureUploadOutcome =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly failure: CaptureFailure };
+
+interface VerifiedOpenUpload {
+  readonly ok: true;
+  readonly handle: FileHandle;
+  readonly fileName: string;
+  readonly media: { readonly modality: 'image' | 'voice'; readonly mimeType: string; readonly maxBytes: number };
+}
+
+async function readHandleBounded(handle: FileHandle, maxBytes: number): Promise<Uint8Array | null> {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const remaining = maxBytes - totalBytes;
+    const chunkCapacity = Math.min(READ_CHUNK_BYTES, remaining + 1);
+    const buffer = Buffer.allocUnsafe(chunkCapacity);
+    const { bytesRead } = await handle.read(buffer, 0, chunkCapacity, null);
+    if (bytesRead === 0) {
+      return Buffer.concat(chunks, totalBytes);
+    }
+    totalBytes += bytesRead;
+    if (totalBytes > maxBytes) {
+      return null;
+    }
+    chunks.push(bytesRead === chunkCapacity ? buffer : buffer.subarray(0, bytesRead));
+  }
+}
+
+async function openVerifiedUpload(
   uploadDir: string,
   sourceRef: string
-): Promise<ReadCaptureUploadOutcome> {
+): Promise<VerifiedOpenUpload | { readonly ok: false; readonly failure: CaptureFailure }> {
   if (!isControlledSourceRef(sourceRef)) {
     return invalidSourceFailure('源文件引用不合法，必须来自受控上传目录。', 'sourceRef');
   }
@@ -317,6 +347,7 @@ export async function readCaptureUpload(
     return invalidSourceFailure('源文件引用越界。', 'sourceRef');
   }
 
+  let handle: FileHandle | null = null;
   try {
     const rootReal = await resolveSafeUploadRoot(uploadDir, false);
     if (rootReal === null) {
@@ -357,73 +388,122 @@ export async function readCaptureUpload(
       };
     }
 
-    const handle = await open(safeTargetPath, fsConstants.O_RDONLY | NOFOLLOW_FLAG);
-    try {
-      const fdStat = await handle.stat();
-      if (!fdStat.isFile() || fdStat.nlink > 1 || fdStat.dev !== preStat.dev || fdStat.ino !== preStat.ino) {
-        return invalidSourceFailure('源文件状态已变更或非受控常规文件。', 'sourceRef');
-      }
-
-      const targetReal = await realpath(safeTargetPath);
-      if (!isStrictlyInsideDir(rootReal, targetReal)) {
-        return invalidSourceFailure('源文件真实路径越出受控根目录。', 'sourceRef');
-      }
-
-      const realStat = await lstat(targetReal);
-      if (realStat.isSymbolicLink() || !realStat.isFile() || realStat.dev !== fdStat.dev || realStat.ino !== fdStat.ino) {
-        return invalidSourceFailure('源文件真实节点与打开句柄不一致。', 'sourceRef');
-      }
-
-      if (fdStat.size === 0) {
-        return {
-          ok: false,
-          failure: { code: 'UPLOAD_EMPTY_FILE', message: '上传文件不能为空。', field: 'sourceRef' }
-        };
-      }
-      if (fdStat.size > media.maxBytes) {
-        return {
-          ok: false,
-          failure: {
-            code: 'UPLOAD_TOO_LARGE',
-            message: `上传文件超过限制（上限 ${Math.round(media.maxBytes / (1024 * 1024))} MB）。`,
-            field: 'sourceRef'
-          }
-        };
-      }
-
-      const bytes = await handle.readFile();
-      if (bytes.byteLength === 0) {
-        return {
-          ok: false,
-          failure: { code: 'UPLOAD_EMPTY_FILE', message: '上传文件不能为空。', field: 'sourceRef' }
-        };
-      }
-      if (bytes.byteLength > media.maxBytes) {
-        return {
-          ok: false,
-          failure: {
-            code: 'UPLOAD_TOO_LARGE',
-            message: `上传文件超过限制（上限 ${Math.round(media.maxBytes / (1024 * 1024))} MB）。`,
-            field: 'sourceRef'
-          }
-        };
-      }
-
-      return {
-        ok: true,
-        bytes,
-        mimeType: media.mimeType,
-        modality: media.modality,
-        filename: fileName
-      };
-    } finally {
+    handle = await open(safeTargetPath, fsConstants.O_RDONLY | NOFOLLOW_FLAG);
+    const fdStat = await handle.stat();
+    if (!fdStat.isFile() || fdStat.nlink > 1 || fdStat.dev !== preStat.dev || fdStat.ino !== preStat.ino) {
       await handle.close();
+      return invalidSourceFailure('源文件状态已变更或非受控常规文件。', 'sourceRef');
     }
+
+    const targetReal = await realpath(safeTargetPath);
+    if (!isStrictlyInsideDir(rootReal, targetReal)) {
+      await handle.close();
+      return invalidSourceFailure('源文件真实路径越出受控根目录。', 'sourceRef');
+    }
+
+    const realStat = await lstat(targetReal);
+    if (
+      realStat.isSymbolicLink() ||
+      !realStat.isFile() ||
+      realStat.dev !== fdStat.dev ||
+      realStat.ino !== fdStat.ino
+    ) {
+      await handle.close();
+      return invalidSourceFailure('源文件真实节点与打开句柄不一致。', 'sourceRef');
+    }
+
+    if (fdStat.size === 0) {
+      await handle.close();
+      return {
+        ok: false,
+        failure: { code: 'UPLOAD_EMPTY_FILE', message: '上传文件不能为空。', field: 'sourceRef' }
+      };
+    }
+    if (fdStat.size > media.maxBytes) {
+      await handle.close();
+      return {
+        ok: false,
+        failure: {
+          code: 'UPLOAD_TOO_LARGE',
+          message: `上传文件超过限制（上限 ${Math.round(media.maxBytes / (1024 * 1024))} MB）。`,
+          field: 'sourceRef'
+        }
+      };
+    }
+
+    return { ok: true, handle, fileName, media };
   } catch (error: unknown) {
+    if (handle !== null) {
+      await handle.close().catch(() => {});
+    }
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ELOOP') {
       return invalidSourceFailure('源文件或路径包含非受控符号链接。', 'sourceRef');
     }
     return invalidSourceFailure('找不到对应的上传文件，请重新上传。', 'sourceRef');
+  }
+}
+
+/**
+ * 校验受控 `sourceRef` 指向的常规单硬链接文件是否存在且符合声明的输入模态（不将文件内容读入内存）。
+ */
+export async function verifyCaptureUploadRef(
+  uploadDir: string,
+  sourceRef: string,
+  expectedModality: 'image' | 'voice'
+): Promise<VerifyCaptureUploadOutcome> {
+  const opened = await openVerifiedUpload(uploadDir, sourceRef);
+  if (!opened.ok) {
+    return opened;
+  }
+  await opened.handle.close();
+  if (opened.media.modality !== expectedModality) {
+    return invalidSourceFailure(
+      `sourceRef 指向的文件不是${expectedModality === 'voice' ? '语音' : '图片'}格式。`,
+      'sourceRef'
+    );
+  }
+  return { ok: true };
+}
+
+/**
+ * 根据受控 `sourceRef` 从 `uploadDir` 安全且有界地读取文件，防止路径穿越、父目录符号链接逃逸、多硬链接、TOCTOU 替换及超限读入内存。
+ */
+export async function readCaptureUpload(
+  uploadDir: string,
+  sourceRef: string
+): Promise<ReadCaptureUploadOutcome> {
+  const opened = await openVerifiedUpload(uploadDir, sourceRef);
+  if (!opened.ok) {
+    return opened;
+  }
+  try {
+    const bytes = await readHandleBounded(opened.handle, opened.media.maxBytes);
+    if (bytes === null) {
+      return {
+        ok: false,
+        failure: {
+          code: 'UPLOAD_TOO_LARGE',
+          message: `上传文件超过限制（上限 ${Math.round(opened.media.maxBytes / (1024 * 1024))} MB）。`,
+          field: 'sourceRef'
+        }
+      };
+    }
+    if (bytes.byteLength === 0) {
+      return {
+        ok: false,
+        failure: { code: 'UPLOAD_EMPTY_FILE', message: '上传文件不能为空。', field: 'sourceRef' }
+      };
+    }
+
+    return {
+      ok: true,
+      bytes,
+      mimeType: opened.media.mimeType,
+      modality: opened.media.modality,
+      filename: opened.fileName
+    };
+  } finally {
+    await opened.handle.close();
   }
 }

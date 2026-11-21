@@ -40,11 +40,14 @@ export {
   validatePendingFeedbackHints,
   type ParsedReceiptResult
 } from './schema.ts';
+export { registerCaptureRoutes, type CaptureRoutesOptions } from './routes.ts';
 export {
   readCaptureUpload,
   saveCaptureUpload,
+  verifyCaptureUploadRef,
   type ReadCaptureUploadOutcome,
-  type SaveCaptureUploadInput
+  type SaveCaptureUploadInput,
+  type VerifyCaptureUploadOutcome
 } from './storage.ts';
 export {
   CaptureProviderError,

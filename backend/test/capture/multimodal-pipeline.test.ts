@@ -10,6 +10,7 @@ import {
   PROMPT_VERSION_TEXT,
   readCaptureUpload,
   saveCaptureUpload,
+  verifyCaptureUploadRef,
   type CaptureAiProvider
 } from '../../src/modules/capture/index.ts';
 
@@ -454,6 +455,34 @@ describe('M1 第三阶段：受控上传存储与语音/小票流水线', () => 
     if (saved.ok) {
       const readBack = await readCaptureUpload(freshUploadDir, saved.upload.sourceRef);
       expect(readBack.ok).toBe(true);
+    }
+
+    // 跨多个 64 KiB 分块读取 + verifyCaptureUploadRef 不读体校验与模态防串台
+    const multiChunkPng = Buffer.concat([PNG_BYTES, Buffer.alloc(180 * 1024, 0x2a)]);
+    const savedMulti = await saveCaptureUpload({
+      uploadDir,
+      bytes: multiChunkPng,
+      mimeType: 'image/png',
+      now: new Date(REFERENCE_TIME)
+    });
+    expect(savedMulti.ok).toBe(true);
+    if (savedMulti.ok) {
+      const verifiedOk = await verifyCaptureUploadRef(uploadDir, savedMulti.upload.sourceRef, 'image');
+      expect(verifiedOk).toEqual({ ok: true });
+      const verifiedWrongModality = await verifyCaptureUploadRef(
+        uploadDir,
+        savedMulti.upload.sourceRef,
+        'voice'
+      );
+      expect(verifiedWrongModality).toEqual({
+        ok: false,
+        failure: expect.objectContaining({ code: 'INVALID_SOURCE_REF' })
+      });
+      const readMulti = await readCaptureUpload(uploadDir, savedMulti.upload.sourceRef);
+      expect(readMulti.ok).toBe(true);
+      if (readMulti.ok) {
+        expect(Buffer.from(readMulti.bytes)).toEqual(multiChunkPng);
+      }
     }
   });
 });

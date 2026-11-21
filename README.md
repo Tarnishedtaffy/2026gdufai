@@ -47,6 +47,7 @@ docker compose up --build
 `assets/` 中符合 Vite 默认八位 hash 命名的资源使用一年 immutable 缓存；所有 HTML（含 Vue 页面回退）及未版本化文件使用 `no-cache`，浏览器通过 ETag 重新验证。
 镜像中的前端固定使用真实 API（`VITE_USE_MOCK=false`）。采集页支持手动填写/核对草稿并明确确认后提交 M2；图片/语音识别仍待接入，保留附件入口与提示。容器启动检查和记账流程回归分别验证。
 数据库与上传目录在容器内固定为 `/app/data/app.db`、`/app/uploads`；`docker compose down` 保留数据，`down --volumes` 会删除数据。
+部署与本地运行时，`UPLOAD_DIR` 应指向真实受控目录（勿经由不可控符号链接）；受控读写在 Linux 下通过 `O_NOFOLLOW`、`fstat` 与逐级 `realpath` 拦截符号链接与 TOCTOU，Windows 下 `O_NOFOLLOW` 回退并由逐级 `lstat` + `realpath` 校验兜底。
 
 ### 用户与鉴权变量（契约 v1.2）
 
