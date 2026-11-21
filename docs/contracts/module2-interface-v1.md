@@ -310,6 +310,7 @@
 | `INVALID_QUERY_PARAM` | 422 | 查询参数非法（分页、筛选、游标等） |
 | `CATEGORY_NOT_FOUND` | 404 | 类别不存在 |
 | `CATEGORY_IN_USE` | 409 | 删除有数据的类别，返回 `counts` |
+| `TRANSACTION_NOT_FOUND` | 404 | 账单不存在 |
 | `CATEGORY_NAME_TAKEN` | 409 | 同一 `kind` 下类别重名 |
 | `CATEGORY_PRESET_PROTECTED` | 403 | 尝试删除预设类别 |
 | `CATEGORY_KIND_MISMATCH` | 409 | 迁移类别（`reassign`）时，目标类别 `kind` 与账单 `direction` 不一致 |
@@ -439,9 +440,12 @@ POST /api/transactions/tx_xxx/void
 
 规则：
 
+- PATCH 请求体必须是普通对象，且至少包含 `categoryId` / `amountCents` / `merchant` / `occurredAt` 之一，否则 `422 INVALID_QUERY_PARAM`（`field: body`）；
 - 仅 `status='confirmed'` 的账单可修改；已作废账单返回 `422 INVALID_QUERY_PARAM`（`field: status`）；
+- 中性记录（`entry_type != 'normal'`）不允许 PATCH 或 void，返回 `422 INVALID_QUERY_PARAM`（`field: entryType`）；中性 `repayment` 的撤销由 PR-C 承载（重算原贷款 `settled_at` 并作废 `${idempotencyKey}#interest` 记录），本端点届时扩展；
 - `void` 幂等：重复调用返回 `200` 与当前 `status='void'`，不重复写入学习规则；
-- 修改分类时写入 `user_category_rules`（下次同商户自动命中）；改到另一侧 `kind` 时翻转 `direction` 并重算当月预算；作废后该账单从统计与预算中排除，但记录保留。
+- `occurredAt` 目前允许未来时间是有意为之（与导入路径的 `FUTURE_TIME` 校验区分），便于用户补录计划内账单；
+- 修改分类时写入 `user_category_rules`（下次同商户自动命中）；只有类别实际变化时才写入并递增 `hit_count`，改到另一侧 `kind` 时翻转 `direction` 并重算当月预算；作废后该账单从统计与预算中排除，但记录保留。
 
 ---
 

@@ -231,7 +231,13 @@ export interface OriginalTransaction {
   readonly entryType: string;
 }
 
-/** 作废原账单（软删除，统计排除）。 */
+/**
+ * 作废原账单（软删除，统计排除）。
+ *
+ * 仅供 intake 内部退款/还款流程调用：只把 `status='confirmed'` 的记录置为 `void`，
+ * 不校验 `entry_type`，也不返回 404/422。外部 API 的作废请走
+ * `transaction-edit.ts` 的 `voidTransactionById`（含幂等与错误码）。
+ */
 export function voidTransaction(db: Db, id: string, userId: string, updatedAt: string): void {
   db.prepare(
     "UPDATE transactions SET status = 'void', updated_at = ? WHERE id = ? AND user_id = ? AND status = 'confirmed'"

@@ -39,3 +39,21 @@
 - 人工审核：待审核
 - 遗留问题：#13 的真实模式会话 provider 仍需补齐
 
+### LOG-Tarnishedtaffy-20261121-02
+
+- **时间**：2026-11-21 14:30（+08:00）
+- **工具/模型**：Trae / DeepSeek-V4.1-Flash
+- **模块 / 分支 / PR**：M2 / `feat/m2-transaction-edit` / #33
+- **任务**：处理 PR #33 的变更请求，收紧账单纠错边界并补齐契约说明
+- **关键提示词**：「先帮我修复 PR #32 和 #33 的变更请求」「都先不合并」
+- **代理做了什么**：
+  - `backend/src/modules/ledger/transaction-edit.ts`：PATCH 增加 body 校验（非普通对象或缺全部可编辑字段 → `422 INVALID_QUERY_PARAM`，`field: body`）；`voidTransactionById` 先判 `entry_type` 再判 `status`，中性记录即使已 void 也返回 422；`changedCategory` 仅在类别实际变化时为真；`merchant` 长度按 Unicode 码点计算
+  - `backend/src/modules/ledger/repository.ts`：为 `voidTransaction` 补 JSDoc，明确仅供 intake 内部使用，外部走 `transaction-edit.ts`
+  - `backend/test/m2/transaction-edit.test.ts`：新增空对象 / 数组 body、同类别不写学习规则、中性且已 void 仍 422、emoji 长度边界 4 组用例
+  - `docs/contracts/module2-interface-v1.md` §2.9：写明 body 校验、中性记录禁止 PATCH / void（`field: entryType`）、PR-C 承接撤销、`occurredAt` 允许未来时间
+  - 新建 contract-change issue #34（新增 `TRANSACTION_NOT_FOUND` 错误码）并关联本 PR
+- **决策**：body 校验放在 `patchTransaction` 入口，路由层保持薄；`TRANSACTION_NOT_FOUND` 虽然是新错误码，但只增不删，按流程单独开 issue 而不直接改契约基线
+- **验证**：`npx -y pnpm@12.21.0 -r typecheck/lint/test` 全绿；backend 204 项、frontend 73 项
+- **人工审核**：待审核
+- **遗留问题**：PR 仍为 CHANGES_REQUESTED，等作者确认；中性还款撤销需 PR-C 实现；不合并、不删分支
+

@@ -6,6 +6,11 @@ import { buildStats, type StatsDirection, type StatsDimension, type StatsOrder }
 import { listTransactions, type TransactionListQuery } from './transactions.ts';
 import { listCategoryItems } from './repository.ts';
 import { parseBatch } from './validation.ts';
+import {
+  patchTransaction,
+  voidTransactionById,
+  type PatchTransactionInput
+} from './transaction-edit.ts';
 
 function invalid(message: string): never {
   throw new AppError('INVALID_QUERY_PARAM', 422, message);
@@ -139,5 +144,21 @@ export async function registerLedgerRoutes(app: FastifyInstance): Promise<void> 
       invalid('limit 必须是整数');
     }
     return reply.send(listTransactions(app.db, app.config.demoUserId, listQuery));
+  });
+
+  app.patch('/api/transactions/:id', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const result = patchTransaction(
+      app.db,
+      id,
+      app.config.demoUserId,
+      (request.body ?? {}) as PatchTransactionInput
+    );
+    return reply.send(result);
+  });
+
+  app.post('/api/transactions/:id/void', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    return reply.send(voidTransactionById(app.db, id, app.config.demoUserId));
   });
 }
