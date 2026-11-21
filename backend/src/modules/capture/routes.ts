@@ -131,6 +131,9 @@ export async function registerCaptureRoutes(
     });
   });
 
+  // 上传解析采用有界内存缓冲（request.body Buffer -> Response.formData() -> fileEntry.arrayBuffer()），
+  // 受 MAX_MULTIPART_BODY_BYTES（15 MiB + 128 KiB）流式拦截保护，单并发请求峰值内存约 3 倍（≈ 45 MB），
+  // 在不引入第三方 multipart 依赖的前提下满足单用户演示场景。
   app.addContentTypeParser(
     'multipart/form-data',
     { bodyLimit: MAX_MULTIPART_BODY_BYTES },
@@ -252,6 +255,24 @@ export async function registerCaptureRoutes(
     const validSentAt = parseStrictSentAt(body.sentAt);
 
     if (body.mode === 'draft') {
+      if (body.pendingFeedback !== undefined) {
+        throw invalidCaptureInput(
+          'draft 模式不接受 pendingFeedback，追问请使用 mode=followup。',
+          'pendingFeedback'
+        );
+      }
+      if (body.followupText !== undefined) {
+        throw invalidCaptureInput(
+          'draft 模式不接受 followupText，追问请使用 mode=followup。',
+          'followupText'
+        );
+      }
+      if (body.currentDraft !== undefined) {
+        throw invalidCaptureInput(
+          'draft 模式不接受 currentDraft，追问请使用 mode=followup。',
+          'currentDraft'
+        );
+      }
       const modality = parseStrictModality(body.modality);
       if (modality === 'text') {
         if (body.sourceRef !== undefined && body.sourceRef !== null) {

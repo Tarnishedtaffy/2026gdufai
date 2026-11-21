@@ -432,6 +432,92 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
           sentAt: SENT_AT
         },
         field: 'pendingFeedback[0].code'
+      },
+      {
+        payload: {
+          mode: 'followup',
+          currentDraft: {
+            amount: null,
+            merchant: '贷款',
+            occurredAt: SENT_AT,
+            direction: 'expense',
+            confidence: 0.9,
+            rawText: '还贷款',
+            modality: 'text',
+            sourceRef: null
+          },
+          followupText: '42块5',
+          pendingFeedback: [{ field: null, code: 'ORIGINAL_ALREADY_SETTLED', severity: 'warning' }],
+          sentAt: SENT_AT
+        },
+        field: 'pendingFeedback[0].code'
+      },
+      {
+        payload: {
+          mode: 'followup',
+          currentDraft: {
+            amount: null,
+            merchant: '瑞幸',
+            occurredAt: SENT_AT,
+            direction: 'expense',
+            confidence: 0.9,
+            rawText: '早上买咖啡',
+            modality: 'text',
+            sourceRef: uploadedImg.sourceRef
+          },
+          followupText: '32块5',
+          sentAt: SENT_AT
+        },
+        field: 'currentDraft.sourceRef'
+      },
+      {
+        payload: {
+          mode: 'followup',
+          currentDraft: {
+            amount: null,
+            merchant: '瑞幸',
+            occurredAt: SENT_AT,
+            direction: 'expense',
+            confidence: 0.9,
+            rawText: '早上买咖啡',
+            modality: 'text',
+            sourceRef: null
+          },
+          followupText: '32块5',
+          pendingFeedback: [{ field: 123, code: 'MISSING_AMOUNT', severity: 'blocking' }],
+          sentAt: SENT_AT
+        },
+        field: 'pendingFeedback[0].field'
+      },
+      {
+        payload: {
+          mode: 'draft',
+          modality: 'text',
+          rawText: '瑞幸32元',
+          pendingFeedback: [],
+          sentAt: SENT_AT
+        },
+        field: 'pendingFeedback'
+      },
+      {
+        payload: {
+          mode: 'draft',
+          modality: 'text',
+          rawText: '瑞幸32元',
+          followupText: '补充说明',
+          sentAt: SENT_AT
+        },
+        field: 'followupText'
+      },
+      {
+        payload: {
+          mode: 'draft',
+          modality: 'text',
+          rawText: '瑞幸32元',
+          currentDraft: {},
+          sentAt: SENT_AT
+        },
+        field: 'currentDraft'
       }
     ]) {
       const res = await app.inject({
@@ -458,7 +544,7 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
       error: { code: 'INVALID_CAPTURE_INPUT', field: 'body' }
     });
 
-    // 追问允许携带 v1.5 新增反馈码（不调用写入）
+    // 追问允许携带当前 main 现行 v1.4 反馈码（不调用写入）
     const okFollowup = await app.inject({
       method: 'POST',
       url: '/api/capture/extract',
@@ -466,7 +552,7 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
         mode: 'followup',
         currentDraft: {
           amount: null,
-          merchant: '房贷还款',
+          merchant: '星巴克',
           occurredAt: SENT_AT,
           direction: 'expense',
           confidence: 0.85,
@@ -475,7 +561,7 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
           sourceRef: uploadedImg.sourceRef
         },
         followupText: '实付42块5',
-        pendingFeedback: [{ field: null, code: 'ORIGINAL_ALREADY_SETTLED', severity: 'warning' }],
+        pendingFeedback: [{ field: 'amount', code: 'ORIGINAL_AMOUNT_ADJUSTED', severity: 'warning' }],
         sentAt: SENT_AT
       }
     });

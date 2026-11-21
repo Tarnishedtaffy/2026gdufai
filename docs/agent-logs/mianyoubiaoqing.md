@@ -244,3 +244,23 @@
 - **验证**：`pnpm -r typecheck`、`pnpm -r lint`、`pnpm --filter @gduf/backend exec vitest run`、`pnpm --filter frontend exec vitest run`、`VITE_USE_MOCK=false pnpm --filter frontend build`、`git diff --check` 与 LF/EOF 检查全部通过。
 - **人工审核**：代码与测试已在本地分支完成自验，待用户确认是否先行推 Draft PR 或等 `#24` 冻结后推正式 PR。
 - **遗留问题**：`docs/contracts/module2-interface-v1.md` v1.6 正文待 `#24`（并顺接 `#23` v1.5）正式冻结后由契约组或在对应 PR 中落盘；前端 `CaptureAttachmentEntry.vue` 对 `/api/capture/*` 的接入与浏览器端到端验收待后端路由与前端联调推进。
+
+### LOG-mianyoubiaoqing-20261121-02
+
+- **时间**：2026-11-21 16:22（+08:00）
+- **工具/模型**：Antigravity / Gemini
+- **模块 / 分支 / PR**：M1 / `feat/m1-capture-routes` / [#35](https://github.com/Tarnishedtaffy/2026gdufai/pull/35)（Draft）
+- **任务**：回应 `#24` `@yukacezar569-blip` 正文补充意见并推送 Draft PR #35；随后按 `@Tarnishedtaffy` 在 PR #35 初审的 P1 与 P3 意见完成修改、补测并回复。
+- **关键提示词**：
+  - 2 吧（推送并创建 Draft PR #35）
+  - 方案 B 吧（P1 选择先把反馈码白名单回退对齐当前 `main` 的 v1.4 18 码，并同步完成初审全部 P3）
+- **代理做了什么**：
+  - **同步 `#24` 与发起 Draft PR #35**：在 `#24` 正文 §2.10.2 与 §2.6 补充明确「`draft` 校验顶层 `modality`、`followup` 校验 `currentDraft.modality` 且不要求顶层 `modality`」，回复 `@yukacezar569-blip`；推送 `feat/m1-capture-routes` 至 fork 并发起 Draft PR #35。
+  - **P1（方案 B）**：按 `#24` §2.10.2 回退兜底原则与用户确认的方案 B，从 `backend/src/modules/capture/normalizers.ts` `ACTIVE_CONTRACT_FEEDBACK_CODES` 暂时移除尚未并入 `main` 的 `#23` v1.5 四个反馈码（严格对齐当前 `main` §1.5 的 18 个现行码），并将 `followup-extraction.test.ts` 与 `routes.test.ts` 改为断言这 4 个未合并码在当前 `main` 基线下被 422 拒绝、同时放行现行 v1.4 码。
+  - **P3 全部收口**：在 `backend/src/modules/capture/routes.ts` 的 `multipart/form-data` 解析器补充有界缓冲（≈3 倍峰值 ≈45 MB/并发）设计注释；在 `mode: "draft"` 分支对 `pendingFeedback`、`followupText`、`currentDraft` 三个仅属 `followup` 阶段的字段严格返回 `422 INVALID_CAPTURE_INPUT`；在 `routes.test.ts` 补齐 `currentDraft.modality === 'text'` 携带非 null `sourceRef`（422）、`pendingFeedback[0].field` 非字符串（422）及 `draft` 模式拒绝追问字段的回归用例。
+- **决策**：
+  - P1 采用方案 B（对齐当前 `main` 18 码），使 PR #35 与 `#23`/`#32` 合入顺序解耦——一旦 `#24` 完成冻结确认即可独立合入，待 `#23`（v1.5）落地 `main` 后再单独补回 4 个新码。
+  - 确认 `buildApp` 缺省 `captureExtractor` 且未配 `config.ai` 时回退 `loadAiConfig({})` 返回 `503 AI_UPSTREAM_ERROR` 属于预期隔离设计。
+- **验证**：`pnpm -r typecheck`、`pnpm -r lint`、`pnpm --filter @gduf/backend exec vitest run`、`pnpm --filter frontend exec vitest run`、`VITE_USE_MOCK=false pnpm --filter frontend build`、`git diff --check` 与 LF/EOF 检查全部通过。
+- **人工审核**：Draft PR #35 已更新并回复 `@Tarnishedtaffy`；等待 `#24` 全部确认框勾选冻结后转为 Ready for Review。
+- **遗留问题**：`#23`（v1.5）合并至 `main` 后需在 M1 `ACTIVE_CONTRACT_FEEDBACK_CODES` 补回其 4 个贷款反馈码；`docs/contracts/module2-interface-v1.md` v1.6 与前端附件闭环待 `#24` 冻结后按计划推进。

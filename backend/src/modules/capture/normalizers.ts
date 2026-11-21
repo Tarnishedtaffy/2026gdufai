@@ -1,6 +1,6 @@
 import type { CaptureDirection, CaptureFailure, PendingFeedbackHint } from './types.ts';
 
-/** 契约 v1.4 §1.5 + 已冻结 #23（v1.5 §6）现行登记的反馈码白名单（不含已废弃历史码）。 */
+/** 严格对齐当前 main 分支冻结契约 v1.4 §1.5 的 18 个现行反馈码白名单（不含已废弃历史码；待 #23 v1.5 合入后再同步新增 4 码）。 */
 export const ACTIVE_CONTRACT_FEEDBACK_CODES: ReadonlySet<string> = new Set([
   'MISSING_AMOUNT',
   'MISSING_TIME',
@@ -19,11 +19,7 @@ export const ACTIVE_CONTRACT_FEEDBACK_CODES: ReadonlySet<string> = new Set([
   'ORIGINAL_NOT_FOUND_RECORDED',
   'ORIGINAL_AMOUNT_ADJUSTED',
   'REFUND_EXCESS_AS_INCOME',
-  'REPAYMENT_EXCESS_AS_EXPENSE',
-  'ORIGINAL_TRANSACTION_AGED',
-  'PARTIAL_REPAYMENT_RECORDED',
-  'AMBIGUOUS_LOAN_PAYMENT',
-  'ORIGINAL_ALREADY_SETTLED'
+  'REPAYMENT_EXCESS_AS_EXPENSE'
 ]);
 
 const DIRECTIONS: readonly CaptureDirection[] = ['expense', 'income'];
