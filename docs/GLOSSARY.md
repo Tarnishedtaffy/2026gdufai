@@ -59,6 +59,8 @@
 | 时间兜底 | time fallback | 第 2 轮起时间仍缺失或在未来，用 `chatAt`/`sentAt` 入库 | 「默认时间」 |
 | 退款 | refund | 记为中性记录（`entry_type='refund'`），保留但不计入收支；匹配到原账单时自动作废原单或调整其金额 | 「负支出」「退款收入」 |
 | 中性记录 | neutral entry | `entry_type` 为 `refund` / `repayment` 的记录，保留可查但不计入收支统计 | 与「作废」混用 |
+| 贷款利息 | loan interest | 预设类别 13（expense）；关键词不含裸「利息」 | 「利息收入」 |
+| 已结清 | settled | 原贷款 `settled_at` 非空，不能再被还款匹配 | 与 `status='void'` 混用 |
 
 ## 5. 账单与类别
 
@@ -69,9 +71,9 @@
 | 金额（分） | `amountCents` | 整数，单位分；入库与出站统一使用 | 「价格」 |
 | 金额（元） | `amount` | 仅出现在 M1 入站，最多两位小数 | 在出站接口中使用元 |
 | 商户 | `merchant` | 消费对象；缺失时 M2 填默认并回 `MERCHANT_DEFAULTED` | 「商家」「店名」混用 |
-| 类别 | `category` / `categoryId` | 分类条目；预设 ID 固定（1–12），不得硬编码到前端或话术 | 「标签」「分组」 |
+| 类别 | `category` / `categoryId` | 分类条目；预设 ID 固定（1–13），不得硬编码到前端或话术 | 「标签」「分组」 |
 | 类别性质 | `kind` | 类别所属方向：`expense` / `income` | 与 `direction` 混用 |
-| 预设类别 | `isPreset: true` | 契约第 3 节的 12 个系统类别 | 「默认类别」 |
+| 预设类别 | `isPreset: true` | 契约第 3 节的 13 个系统类别 | 「默认类别」 |
 | 贷款 | `loan` | 收入类别，ID 12；借款到账计入收入 | 「借款」「网贷」混用 |
 | 自定义类别 | `custom` / `isPreset: false` | 用户新增的类别 | — |
 | 分类置信度 | `categoryConfidence` | M2 分类结果置信度；< 0.75 回 `LOW_CONFIDENCE_CATEGORY` | 与「抽取置信度」混用 |

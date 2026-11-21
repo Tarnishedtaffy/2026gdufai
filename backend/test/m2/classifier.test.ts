@@ -10,7 +10,7 @@ seedCategories(db);
 function addCustomCategory(): void {
   db.prepare(
     `INSERT INTO categories (id, name, kind, keywords, color, icon, sort_order, is_preset, is_active, created_at)
-     VALUES (13, '宠物', 'expense', ?, '#000000', '🐱', 13, 0, 1, '2026-11-16T00:00:00+08:00')`
+     VALUES (14, '宠物', 'expense', ?, '#000000', '🐱', 14, 0, 1, '2026-11-16T00:00:00+08:00')`
   ).run(JSON.stringify(['狗粮', '猫粮', '咖啡']));
 }
 
@@ -33,13 +33,13 @@ describe('classify', () => {
 
   it('自定义类别关键词命中，优先级高于预设', () => {
     const result = classify({ merchant: null, rawText: '买狗粮 60', direction: 'expense' }, context);
-    expect(result).toMatchObject({ categoryId: 13, source: 'rule', confidence: 0.92 });
+    expect(result).toMatchObject({ categoryId: 14, source: 'rule', confidence: 0.92 });
   });
 
   it('关键词长度相同时自定义类别优先', () => {
     // 「咖啡」同时存在于餐饮（预设）与宠物（自定义）
     const result = classify({ merchant: null, rawText: '咖啡', direction: 'expense' }, context);
-    expect(result.categoryId).toBe(13);
+    expect(result.categoryId).toBe(14);
   });
 
   it('用户历史规则优先级最高', () => {

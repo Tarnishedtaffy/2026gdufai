@@ -96,7 +96,7 @@ flowchart LR
 - 数据库：SQLite 单文件，容器内路径通过 `DATABASE_PATH` 配置，挂载到卷持久化。
 - 金额：入库为整数分；M1 入站的元在 M2 校验阶段转换，转换只发生这一处。
 - 时间：存 ISO-8601 字符串（带 `+08:00`）并冗余 `occurred_date` 用于统计；统计时区 `Asia/Shanghai`。
-- 预设类别 ID 1–12 固定，由 seed 脚本写入；前端与话术通过 `GET /api/categories` 获取。
+- 预设类别 ID 1–13 固定，由 seed 脚本写入；前端与话术通过 `GET /api/categories` 获取。
 - 上传文件（语音/图片）落盘到 `UPLOAD_DIR`，数据库只存相对路径（`sourceRef`）。
 
 ## 5. 待定事项

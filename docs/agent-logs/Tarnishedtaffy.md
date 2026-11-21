@@ -39,3 +39,20 @@
 - 人工审核：待审核
 - 遗留问题：#13 的真实模式会话 provider 仍需补齐
 
+### LOG-Tarnishedtaffy-20261121-01
+
+- **时间**：2026-11-21 14:30（+08:00）
+- **工具/模型**：Trae / DeepSeek-V4.1-Flash
+- **模块 / 分支 / PR**：M2 / `feat/m2-loan-interest-a` / #32
+- **任务**：处理 PR #32 的变更请求，修复迁移重名回滚风险并补齐契约 v1.5 缺口
+- **关键提示词**：「先帮我修复 PR #32 和 #33 的变更请求」「都先不合并」
+- **代理做了什么**：
+  - `backend/src/db/migrations/003_loan_interest.sql`：同名自定义类别改为「唯一后缀」重命名（`(旧)` → `(旧2)`…`(旧4)`），避免撞 `UNIQUE(kind,name)` 导致整个迁移回滚；预设 13 改用普通 `INSERT`，让意外冲突显式失败
+  - `backend/test/m2/migration-loan-interest.test.ts`：新增旧库已占用 `贷款利息(旧)`、自定义 13 与同名 14 并存、种子后类别 13 关键词逐项相等、`principal_cents` 拒绝负数、`idx_tx_matched_entry` 存在等 5 条用例
+  - `docs/contracts/module2-interface-v1.md`：修正 `MISSING_ORIGINAL_TRANSACTION` / `REPAYMENT_RECORDED_NEUTRAL` 话术；§1.3 补拆分校验与 `effectivePrincipalCents` 落库规则；新增 §1.8 原账单匹配（1D）；§1.6 补 `#interest` 幂等键；§2.9 补作废原贷款口径；统一 `netCents` 措辞
+  - `docs/GLOSSARY.md`、`docs/ARCHITECTURE.md`、`frontend/verify2.test.ts`：预设类别 12 → 13
+- **决策**：唯一后缀用多段 `UPDATE ... NOT EXISTS` 覆盖 4 级，保持 SQL 可读；超过 4 级仍冲突则让 `INSERT` 显式失败，不再静默跳过
+- **验证**：`npx -y pnpm@12.21.0 -r typecheck/lint/test` 全绿；backend 192 项、frontend 73 项
+- **人工审核**：待审核
+- **遗留问题**：PR 仍为 CHANGES_REQUESTED，等作者确认；不合并、不删分支
+

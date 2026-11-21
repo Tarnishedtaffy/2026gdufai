@@ -475,3 +475,82 @@
 - **验证**：`typecheck` / `lint` / `test` 全绿，backend 15 文件 **102 例**
 - **人工审核**：待复审
 - **遗留问题**：PR 描述 diff 数字需按实际更新；#18 需补 v1.4 清单；#21 需勾选受影响方
+### LOG-Z_Wen-20261119-09
+
+- **时间**：2026-11-19 21:10（+08:00）
+- **工具/模型**：DeepSeek Harness / deepseek-flash
+- **模块 / 分支 / PR**：M2 / `feat/m2-loan-interest-a` / 待建
+- **任务**：v1.5 PR-A——迁移 003、预设类别 13、契约 v1.5
+- **关键提示词**：用户要求 B+C 并行；PR-A 基于 #17 head `64e58c9` 堆叠
+- **代理做了什么**：
+  - `003_loan_interest.sql`：`transactions.settled_at`；自定义 13 整体迁到 `MAX(id)+1`，`defer_foreign_keys` 保证子表引用可更新；插入预设 13
+  - `seed/categories.ts`：新增 ID 13「贷款利息」，自定义从 14 起
+  - 契约：升 v1.5（引用 #23），补 `repaymentPart`、3 个新反馈码、类别 13、`settledAt`、v1.5 变更说明
+  - GLOSSARY：贷款利息、已结清
+  - 测试：db/categories 计数改 13/9，classifier 自定义类别改 14，新增「旧库自定义 13 迁移」用例
+- **决策**：不用 `status='settled'`，用 `settled_at`，避免破坏 `status='confirmed'` 查询
+- **验证**：`typecheck` / `lint` / `test` 全绿，backend 16 文件 **103 例**
+- **人工审核**：待开 PR
+- **遗留问题**：PR-B（纯利息旁路）与 PR-C（1D/2C）未做；等 #17 合并后 rebase
+### LOG-Z_Wen-20261119-10
+
+- **时间**：2026-11-19 22:50（+08:00）
+- **工具/模型**：DeepSeek Harness / deepseek-flash
+- **模块 / 分支 / PR**：M2 / `feat/m2-loan-interest-a` / 待建
+- **任务**：按 #22/#23 定稿更新 PR-A
+- **关键提示词**：reviewer 要求补 principal_cents、同名迁移、关键词、契约 v1.5 定稿
+- **代理做了什么**：
+  - 迁移 003 增加 `principal_cents`；同名自定义「贷款利息」先重命名再迁 ID
+  - seed 类别 13 关键词补 `还利息 / 付利息 / 还息`
+  - 契约：补 `principalCents` / `interestCents`、`interestTransactionId`、`ORIGINAL_ALREADY_SETTLED`；§3 写死 diff 公式、利息不参与结算、本金超额拒收、现金流口径；§5.1 更新
+  - 迁移测试：补同名自定义用例与 legacy `principal_cents` 断言
+- **决策**：本金超额直接 `INVALID_BATCH`，不做截断；利息不参与 outstanding
+- **验证**：`typecheck` / `lint` / `test` 全绿，backend 16 文件 **104 例**
+- **人工审核**：待开 PR
+- **遗留问题**：PR-B / PR-C 未做；等 #17 合并后 rebase
+### LOG-Z_Wen-20261120-01
+
+- **时间**：2026-11-20 00:20（+08:00）
+- **工具/模型**：DeepSeek Harness / deepseek-flash
+- **模块 / 分支 / PR**：M2 / `feat/m2-loan-interest-a` / #27
+- **任务**：修复 PR #27 的 CI 失败（前端反馈码未同步 v1.5）
+- **关键提示词**：PR #27 verify job 失败，本地复现为 frontend `verify2` / `bugtest` 反馈码集合不一致
+- **代理做了什么**：
+  - `packages/capture-flow/src/feedback.ts` 补 v1.5 的 4 个码：`ORIGINAL_TRANSACTION_AGED`、`PARTIAL_REPAYMENT_RECORDED`、`AMBIGUOUS_LOAN_PAYMENT`、`ORIGINAL_ALREADY_SETTLED`
+  - 新增话术条目，供前端与确认流程复用
+- **决策**：这是契约 v1.5 的最小跨模块同步，归入 #18 的剩余前端工作；已在 PR 描述中 @ 前端负责人
+- **验证**：`pnpm -r typecheck` / `lint` / `test` / `build` 全绿（frontend 73 例、backend 187 例）
+- **人工审核**：待 CI 重跑
+- **遗留问题**：前端类别 13 / mock / `settledAt` 等仍在 #18
+### LOG-Z_Wen-20261120-02
+
+- **时间**：2026-11-20 14:00（+08:00）
+- **工具/模型**：DeepSeek Harness / deepseek-flash
+- **模块 / 分支 / PR**：M2 / `feat/m2-loan-interest-a` / #27
+- **任务**：按 #24 代码级 Review 补齐 PR-A
+- **关键提示词**：reviewer 要求迁移补 CHECK/索引、类别 13 颜色与 seed 一致、前端类别 13 同步、开上游 PR
+- **代理做了什么**：
+  - 迁移 003 增加 `principal_cents CHECK`、`idx_tx_matched_entry` 索引；
+  - 类别 13 颜色统一为 `#14B8A6`（seed、契约、前端 mock）；
+  - 前端 `verify2` 色值数组与类别数量改为 13；
+  - 契约 §2.2 补 `netCents` 口径说明；
+  - 已 rebase 到 main `76bcf40`，并修复 v1.5 反馈码前端测试
+- **决策**：沿用现有迁移实现（defer_foreign_keys + 改 id），只补约束与索引，不改成复制行方案
+- **验证**：`pnpm -r typecheck / lint / test / build` 全绿（frontend 73 例、backend 187 例）
+- **人工审核**：待开 PR 并重跑 CI
+- **遗留问题**：PR-B / PR-C 未做
+### LOG-Z_Wen-20261120-03
+
+- **时间**：2026-11-20 14:30（+08:00）
+- **工具/模型**：DeepSeek Harness / deepseek-flash
+- **模块 / 分支 / PR**：M2 / `feat/m2-loan-interest-a` / PR-A（新 fork）
+- **任务**：按 #27 Review 修复迁移与契约
+- **关键提示词**：reviewer 指出迁移类别 13 关键词少 3 个、同名自定义在任意 id 仍会阻塞预设 13、契约多处仍是 v1.4 口径
+- **代理做了什么**：
+  - 迁移 003 关键词改为 9 个；同名自定义重命名改为与 id 无关（所有 is_preset=0 expense 同名行）
+  - 迁移测试：断言类别 13 关键词含 `还利息/付利息/还息`；新增「同名自定义 id=20 + 交易/预算/规则引用」用例
+  - 契约：`ORIGINAL_NOT_FOUND` 去掉 30 天；`ORIGINAL_AMOUNT_ADJUSTED` 限定退款；`REPAYMENT_EXCESS_AS_EXPENSE` 标 deprecated；补 §1.3 拆分校验、§2.9 void 规则、判断顺序；删除 v1.5 预告
+- **决策**：迁移继续用 `defer_foreign_keys` + 改 id，不改成复制行；同名重命名覆盖任意 id
+- **验证**：backend 23 文件 **187 例**通过；`git diff --check` 无输出
+- **人工审核**：待新 PR 复审
+- **遗留问题**：PR-B / PR-C 未做

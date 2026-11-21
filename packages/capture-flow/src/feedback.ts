@@ -21,6 +21,11 @@ export const captureFeedbackText = Object.freeze({
   ORIGINAL_AMOUNT_ADJUSTED: '原账单金额已自动调整为剩余金额。',
   REFUND_EXCESS_AS_INCOME: '原账单已自动作废，退款超出部分已计入收入。',
   REPAYMENT_EXCESS_AS_EXPENSE: '原贷款账单已自动作废，还款超出部分已计入支出。',
+  // 契约 v1.5（#23）：长期原单、部分还款、本息不明、已结清。
+  ORIGINAL_TRANSACTION_AGED: '这笔原账单较早，请确认是否对应正确。',
+  PARTIAL_REPAYMENT_RECORDED: '已记录本次还款，贷款尚未结清。',
+  AMBIGUOUS_LOAN_PAYMENT: '这笔是还本金还是还利息？请补充本金与利息金额。',
+  ORIGINAL_ALREADY_SETTLED: '这笔贷款已结清，无需再还款。',
   // 仅解释历史 v1.3 回执；不作为 v1.4 的现行处理规则。
   REFUND_EXCEEDS_ORIGINAL: '退款金额高于原账单，尚未入库，请核对退款金额。',
   PARTIAL_REFUND_AS_INCOME: '已按部分退款计入收入。',

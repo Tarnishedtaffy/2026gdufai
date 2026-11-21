@@ -15,6 +15,7 @@ export const MOCK_CATEGORIES = [
   { id: 10, name: '转账', kind: 'income', color: '#F472B6', icon: 'swap', isPreset: true, isActive: true },
   { id: 11, name: '其他收入', kind: 'income', color: '#9CA3AF', icon: 'plus', isPreset: true, isActive: true },
   { id: 12, name: '贷款', kind: 'income', color: '#0EA5E9', icon: 'bank', isPreset: true, isActive: true },
+  { id: 13, name: '贷款利息', kind: 'expense', color: '#14B8A6', icon: 'receipt', isPreset: true, isActive: true },
 ] as const satisfies readonly CategoryItem[];
 
 export const MOCK_TRANSACTIONS: TransactionItem[] = [

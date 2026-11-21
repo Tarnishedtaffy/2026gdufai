@@ -6,7 +6,7 @@ describe('数据库迁移与种子', () => {
   it('首次打开会执行迁移并记录版本', () => {
     const db = openDatabase(':memory:');
     const version = Number(db.pragma('user_version', { simple: true }));
-    expect(version).toBe(2);
+    expect(version).toBe(3);
     db.close();
   });
 
@@ -30,7 +30,7 @@ describe('数据库迁移与种子', () => {
     db.close();
   });
 
-  it('种子写入 12 个预设类别，支出 8 / 收入 4', () => {
+  it('种子写入 13 个预设类别，支出 9 / 收入 4', () => {
     const db = openDatabase(':memory:');
     seedCategories(db);
     const row = db
@@ -38,10 +38,10 @@ describe('数据库迁移与种子', () => {
         "SELECT COUNT(*) AS total, SUM(kind = 'expense') AS expense, SUM(kind = 'income') AS income FROM categories WHERE is_preset = 1"
       )
       .get() as { total: number; expense: number; income: number };
-    expect(row.total).toBe(12);
-    expect(row.expense).toBe(8);
+    expect(row.total).toBe(13);
+    expect(row.expense).toBe(9);
     expect(row.income).toBe(4);
-    expect(PRESET_CATEGORIES).toHaveLength(12);
+    expect(PRESET_CATEGORIES).toHaveLength(13);
     db.close();
   });
 
