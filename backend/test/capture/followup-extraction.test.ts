@@ -188,14 +188,7 @@ describe('M1 第二阶段：追问修正与补丁抽取', () => {
       })
     });
 
-    for (const invalidCode of [
-      'REFUND_NOT_SUPPORTED',
-      'NON_EXISTENT_CODE',
-      'ORIGINAL_TRANSACTION_AGED',
-      'PARTIAL_REPAYMENT_RECORDED',
-      'AMBIGUOUS_LOAN_PAYMENT',
-      'ORIGINAL_ALREADY_SETTLED'
-    ]) {
+    for (const invalidCode of ['REFUND_NOT_SUPPORTED', 'NON_EXISTENT_CODE']) {
       const outcome = await extractor.extractFollowupPatch({
         currentDraft,
         followupText: '补充说明',
@@ -214,11 +207,15 @@ describe('M1 第二阶段：追问修正与补丁抽取', () => {
     expect(aiCalls).toBe(0);
   });
 
-  it('放行当前 main 现行 v1.4 反馈码，且忽略模型擅自回传的 patch.rawText 覆盖', async () => {
-    const activeV14Codes = [
+  it('放行契约 v1.5 现行反馈码，且忽略模型擅自回传的 patch.rawText 覆盖', async () => {
+    const activeV15Codes = [
       'ORIGINAL_AMOUNT_ADJUSTED',
       'REFUND_EXCESS_AS_INCOME',
-      'REPAYMENT_EXCESS_AS_EXPENSE'
+      'REPAYMENT_EXCESS_AS_EXPENSE',
+      'ORIGINAL_TRANSACTION_AGED',
+      'PARTIAL_REPAYMENT_RECORDED',
+      'AMBIGUOUS_LOAN_PAYMENT',
+      'ORIGINAL_ALREADY_SETTLED'
     ];
     const currentDraft: CaptureDraft = {
       amount: 500,
@@ -240,7 +237,7 @@ describe('M1 第二阶段：追问修正与补丁抽取', () => {
       )
     });
 
-    for (const code of activeV14Codes) {
+    for (const code of activeV15Codes) {
       const outcome = await extractor.extractFollowupPatch({
         currentDraft,
         followupText: '本金450元',

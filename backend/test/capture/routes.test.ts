@@ -438,25 +438,6 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
           mode: 'followup',
           currentDraft: {
             amount: null,
-            merchant: '贷款',
-            occurredAt: SENT_AT,
-            direction: 'expense',
-            confidence: 0.9,
-            rawText: '还贷款',
-            modality: 'text',
-            sourceRef: null
-          },
-          followupText: '42块5',
-          pendingFeedback: [{ field: null, code: 'ORIGINAL_ALREADY_SETTLED', severity: 'warning' }],
-          sentAt: SENT_AT
-        },
-        field: 'pendingFeedback[0].code'
-      },
-      {
-        payload: {
-          mode: 'followup',
-          currentDraft: {
-            amount: null,
             merchant: '瑞幸',
             occurredAt: SENT_AT,
             direction: 'expense',
@@ -544,7 +525,7 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
       error: { code: 'INVALID_CAPTURE_INPUT', field: 'body' }
     });
 
-    // 追问允许携带当前 main 现行 v1.4 反馈码（不调用写入）
+    // 追问允许携带契约 v1.4 / v1.5 现行反馈码（不调用写入）
     const okFollowup = await app.inject({
       method: 'POST',
       url: '/api/capture/extract',
@@ -567,6 +548,31 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
     });
     expect(okFollowup.statusCode).toBe(200);
     expect(okFollowup.json()).toEqual({ patch: { amount: 42.5 } });
+
+    // v1.5 新增反馈码同样放行（#41）
+    const okV15Followup = await app.inject({
+      method: 'POST',
+      url: '/api/capture/extract',
+      payload: {
+        mode: 'followup',
+        currentDraft: {
+          amount: null,
+          merchant: '贷款银行',
+          occurredAt: SENT_AT,
+          direction: 'expense',
+          confidence: 0.85,
+          rawText: '还房贷',
+          modality: 'text',
+          sourceRef: null
+        },
+        followupText: '本金还40块',
+        pendingFeedback: [
+          { field: 'originalTransactionId', code: 'PARTIAL_REPAYMENT_RECORDED', severity: 'warning' }
+        ],
+        sentAt: SENT_AT
+      }
+    });
+    expect(okV15Followup.statusCode).toBe(200);
 
     // 空识别（模糊小票 / 空白转写）→ 422 CAPTURE_EMPTY_RECOGNITION
     const emptyRec = await setupHarness({
