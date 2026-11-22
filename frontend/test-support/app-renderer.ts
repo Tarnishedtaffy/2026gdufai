@@ -16,6 +16,7 @@ export class TestNode {
   multiple = false;
   constructor(public kind: string, public text = '') {}
   get tagName() { return this.kind.toUpperCase(); }
+  getRootNode() { return document; }
   get options(): TestNode[] { return this.children.flatMap(child => child.kind === 'option' ? [child] : child.options); }
   addEventListener(name: string, callback: (event: unknown) => void) { (this.listeners[name] ??= []).push(callback); }
   removeEventListener() {}
