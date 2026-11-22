@@ -18,13 +18,15 @@
 
 ## 1. 今天发生了什么
 
-| 时间 | 事件 |
+> 下表时间已由 GitHub UTC 换算为 `+08:00`。
+
+| 时间（+08:00） | 事件 |
 |---|---|
-| 09:11–09:16 | #31（类别 CRUD）、#32（迁移 003 / 贷款利息 13）、#33（账单纠错 PATCH / void）合并 |
-| 随后 | 按维护者要求回滚（`964c97c`） |
-| 09:33–09:38 | #44 / #45 / #46 从回滚后的 main 重新 cherry-pick，保留原作者 `Z_Wen` 后合并 |
-| 09:21 | 维护者基于审查结果创建 #36–#42 |
-| 10:46 | #47（M2 契约 v1.5 退款 / 贷款还款）合并 |
+| 17:11–17:16 | #31（类别 CRUD）、#32（迁移 003 / 贷款利息 13）、#33（账单纠错 PATCH / void）合并 |
+| 17:21 | 维护者基于审查结果创建 #36–#42 |
+| 17:24 | 按维护者要求回滚（`964c97c`）；同一回滚还包含 M1 的 #29，后者以 #43 重新合并 |
+| 17:33–17:38 | #44 / #45 / #46 从回滚后的 main 重新 cherry-pick，保留原作者 `Z_Wen` 后合并 |
+| 18:46 | #47（M2 契约 v1.5 退款 / 贷款还款）合并 |
 | 当前 | `main = e4d1c34`；#35（M1 路由）仍为 Draft，不属本次范围 |
 
 结论：#44 / #45 / #46 的代码已进入 main，但审查遗留问题没有关闭。
@@ -45,6 +47,8 @@
 | #22 / #34 | v1.5 贷款、`TRANSACTION_NOT_FOUND` | 合并后收口 | 待关闭 | #39 补齐 `field` 后关 #34 |
 
 **不要动我的四项**；**我不会动 M4 与 #38**。
+
+> **GitHub assignee 说明**：当前 #36 / #37 / #39 / #42 在 GitHub 上的 assignee 都是 `ONFAIL`（即 `Z_Wen`），与本文档的分工相反。**以本文档为准**；实现 agent 接手时会在四个 issue 下留言说明「由 Tarnishedtaffy 的 agent 执行，Z_Wen 只做契约签字」，避免接收方按 assignee 误认领。
 
 ---
 
@@ -73,11 +77,14 @@ packages/capture-flow/src/feedback.ts                 #39
 docs/agent-logs/Tarnishedtaffy.md                     LOG-Tarnishedtaffy-20261122-02
 ```
 
+> 我的 PR 会改动共享目录 `docs/contracts/` 与 M1 共享包 `packages/capture-flow/src/feedback.ts`。按 AGENTS.md，PR 描述中会单列说明，并 @ `Z_Wen`、`huangsiting546`（契约）与 `yukacezar569-blip`（capture-flow）。
+
 ### 3.3 我的口径（需要你方确认）
 
 - #36：改类别时 `category_confidence = NULL`（不是 1.0），并在契约 §2.9 写明。
 - #37：预设类别作为 reassign 源直接 `403 CATEGORY_PRESET_PROTECTED`；所有校验与三类更新包进同一个 `db.transaction`。
 - #39：契约示例从 `13/reassign` 改为自定义类别（14）；`TRANSACTION_NOT_FOUND` 补 `field: id`；`REPAYMENT_EXCESS_AS_EXPENSE` 话术标注「仅解释 v1.4 历史回执」。
+  - 补充：#39 第 2 条（测试「ID 从 13 起自增」）在 `main` 上已由 #44/#46 修复，无需改代码，只需在 issue/PR 中注明已收口。
 - #42：只改契约 §3 升级说明，不改迁移 SQL。
 
 ### 3.4 我的验证与审议
@@ -117,13 +124,14 @@ backend/test/m2/budgets.test.ts               # 读取、写入、冲突、level
 
 - 表 `budgets`、`budget_alerts` 已在 `001_init.sql` 建好；
 - 类别 reassign 已会迁移 `budgets`；
-- 契约 §2.5 / §2.8 已定义路径、字段与错误码（`BUDGET_CONFLICT` 等）。
+- `shared/errors.ts` 已含 `BUDGET_NOT_FOUND` / `BUDGET_CONFLICT`，M4 不需要改共享目录；
+- 契约 §2.5 已定义读取路径、字段与 `level` 阈值；§2.8 定义写入/删除与 `BUDGET_NOT_FOUND`；`BUDGET_CONFLICT` 见 §2.7（reassign 冲突场景）。
 
 需要确认：
 
-- `level` 阈值是否按契约的 normal / near（≥80%）/ over（≥100%）；
-- 提醒是每个「月份 + 类别」只写一次，还是每次写入都更新；
-- 若契约没有写清，先开 `contract-change` issue，不要自行约定新口径。
+- `level` 直接按契约 §2.5 的 `normal` / `near`（≥80%）/ `over`（≥100%）执行，无需再确认；
+- 提醒写入时机：每个「月份 + 类别」只写一次，还是每次写入都更新；
+- 若契约未写清 alert 口径，先开 `contract-change` issue，不要自行约定新口径。
 
 ### 4.3 第三步：M4 前端接真实 API
 
@@ -141,8 +149,18 @@ frontend/src/mock/*                     # 保持 mock 可演示
 
 **顺序要求**：等我的 #36 合并后再改 `transaction-edit.ts`，否则同一文件必然冲突。你可以先把 M4 的预算重算函数写好并在 `budgets.ts` 暴露，等 rebase 后接入 PATCH。
 
+**合并信号**：以 **#36 / #37 / #39 / #42 全部关闭**（或对应 PR `mergedAt` 非空）为准。届时执行：
+
+```bash
+git fetch upstream
+git rebase upstream/main
+```
+
+然后再改 `transaction-edit.ts` 接 #38。
+
 ### 4.5 第五步：收口 M2 状态
 
+- #23：v1.5 已随 #47 落地，可确认后关闭；
 - #22：确认 #47 已覆盖后关闭；
 - #34：等我 #39 补完 `field: id` 后关闭；
 - #38：M4 完成后关闭；
@@ -167,7 +185,7 @@ frontend/src/mock/*                     # 保持 mock 可演示
 | `transaction-edit.ts` | #36 | #38 | **我先合并，你再 rebase 接 #38** |
 | `categories.ts` | #37 | 不碰 | 你只会在 `budgets` 表层面受影响 |
 | `routes.ts` | 不碰 | M4 路由 | 你独占；注意 import 冲突 |
-| 契约 §2.6 / §2.7 / §2.9 / §3 | 我改 | 不碰 | 你若要改，等我合并后 rebase |
+| 契约 §2.6 / §2.7 / §2.9 / §3 | 我改 | 不碰 | 你若要改，等合并信号（定义见 §4.4）后 rebase |
 | 契约 §2.5 / §2.8 | 不碰 | M4 可能补充 | 只在段末追加，不重排既有文本 |
 | 迁移文件 | 不碰 | 可新增 004 | 编号顺延，不修改 001–003 |
 | M2 测试文件 | 我改两个 | 你新增 `budgets.test.ts` | 互不覆盖 |
@@ -178,7 +196,7 @@ frontend/src/mock/*                     # 保持 mock 可演示
 1. 我现在开 `fix/m2-v15-followup-issues`，先完成 #36/#37/#39/#42；
 2. 你同时从 `e4d1c34` 开 `feat/m4-budgets`，先做新增文件 `budgets.ts`、`budgets.test.ts` 和前端；
 3. 契约与 `transaction-edit.ts` 相关改动暂缓；
-4. 我的 PR 合并后，你 rebase，再补 #38 与契约段末说明；
+4. 我的 PR 合并（#36/#37/#39/#42 全部关闭）后，你执行 `git fetch upstream && git rebase upstream/main`，再补 #38 与契约段末说明；
 5. 你的 M4 PR 合并后再关闭 #38。
 
 这样既不互相阻塞，也不会在同一文件上反复解冲突。
@@ -207,6 +225,8 @@ cd backend && npx vitest run test/m2/transaction-edit.test.ts test/m2/categories
 - backend 307 项；
 - frontend 75 项；
 - 改动不影响启动方式时，不必跑 `docker compose up --build`。
+
+> **Windows 本地验证注记**：frontend 套件在 Windows 本地可能出现约 13 项环境性失败（`CaptureDraftCard.vue` SFC 编译相关，CI/Linux 同一 commit 全绿）。回归判定以 GitHub CI 与 backend 计数为准，不要把这类失败误判为代码回归。
 
 ---
 
@@ -237,6 +257,7 @@ cd backend && npx vitest run test/m2/transaction-edit.test.ts test/m2/categories
 - [ ] #36 / #37 / #39 / #42 的测试与契约更新
 - [ ] `LOG-Tarnishedtaffy-20261122-02`
 - [ ] 独立审议模型通过
+- [ ] 在 #36 / #37 / #39 / #42 留言说明分工变更
 - [ ] PR 合并并关闭 #36 / #37 / #39 / #42
 
 ### 你的交付
@@ -244,13 +265,16 @@ cd backend && npx vitest run test/m2/transaction-edit.test.ts test/m2/categories
 - [ ] M4 issue + `feat/m4-budgets` PR
 - [ ] `/api/budgets` 读写、level、alerts、前端 CRUD
 - [ ] `LOG-Z_Wen-20261122-03`
+- [ ] 收到合并信号（#36/#37/#39/#42 全部关闭）后再 rebase
 - [ ] rebase 后完成 #38
 - [ ] M4 PR 合并并关闭 #38
-- [ ] #22 / #34 状态收口
+- [ ] #22 / #23 / #34 状态收口
 
 ---
 
 ## 9. 待你方书面确认的三个口径
+
+**签字主体**：`Z_Wen` / `huangsiting546`。agent 在 issue 下的留言必须注明「已由人工确认」，否则不视为契约签字。
 
 | 项 | 我的默认方案 | 需要你方确认 |
 |---|---|---|
@@ -259,6 +283,8 @@ cd backend && npx vitest run test/m2/transaction-edit.test.ts test/m2/categories
 | #36 改类别后置信度 | `NULL` | 是否同意，或改为 1.0 |
 
 确认方式：直接在对应 issue 下留言，不要只在聊天里说；我的 PR 会引用这些结论。
+
+若上述默认方案被否决，替代路径见 [REVIEW_ASSIGNMENT_20261122.md](REVIEW_ASSIGNMENT_20261122.md) §7；修改后仅复审受影响章节。
 
 ---
 
@@ -269,3 +295,5 @@ cd backend && npx vitest run test/m2/transaction-edit.test.ts test/m2/categories
 - [工程交接说明](AGENT_HANDOFF_20261122.md)
 - [契约 v1.5](contracts/module2-interface-v1.md)
 - [汇总日志](agent-logs/SUMMARY.md)
+
+> 上述前三份文档目前不在 `main`，而是随本文件存放于 `trae/agent-PhqOdE` 分支。单独分发本文档时，请连同这三份一起附上，否则链接会断。
