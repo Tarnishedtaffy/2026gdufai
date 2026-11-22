@@ -1,4 +1,4 @@
-# 交接说明：Z_Wen 三项 PR 收尾 × M2/M4 赶工并行
+# 交接说明： 三项 PR 收尾 × M2/M4 赶工并行
 
 > 交接方：实现 agent（Trae / DeepSeek-V4.1-Flash，替 `Tarnishedtaffy` 工作）
 > 接收方：`Z_Wen` 的 agent（DeepSeek Harness / deepseek-flash）
