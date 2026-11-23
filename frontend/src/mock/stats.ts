@@ -22,6 +22,7 @@ function isPresetCategory(categoryId: number): boolean {
 function buildBucketCategories(bucketTxs: TransactionItem[], totalDirCents: number): StatsCategory[] {
   const map = new Map<number, StatsCategory>();
   for (const tx of bucketTxs) {
+    if (!tx.category) continue;
     const prev = map.get(tx.category.id);
     if (prev) {
       prev.totalCents += tx.amountCents;
@@ -79,7 +80,7 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
       bucketCount += 1;
       if (tx.direction === 'expense') bucketExp += tx.amountCents;
       if (tx.direction === 'income') bucketInc += tx.amountCents;
-      if (tx.direction === direction) {
+      if ((direction === 'all' || tx.direction === direction) && tx.category) {
         dirTxs.push(tx);
         const prevTop = overallCatMap.get(tx.category.id);
         if (prevTop) {
@@ -95,7 +96,8 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
       }
     }
 
-    const dirTotal = direction === 'expense' ? bucketExp : bucketInc;
+    const dirTotal =
+      direction === 'expense' ? bucketExp : direction === 'income' ? bucketInc : bucketExp + bucketInc;
     buckets.push({
       period,
       expenseCents: bucketExp,
@@ -108,7 +110,8 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
     totalCount += bucketCount;
   }
 
-  const targetTotal = direction === 'expense' ? totalExpenseCents : totalIncomeCents;
+  const targetTotal =
+    direction === 'expense' ? totalExpenseCents : direction === 'income' ? totalIncomeCents : totalExpenseCents + totalIncomeCents;
   let topCategory: TopCategory | null = null;
   for (const item of overallCatMap.values()) {
     item.ratio = targetTotal > 0 ? Number((item.totalCents / targetTotal).toFixed(4)) : 0;

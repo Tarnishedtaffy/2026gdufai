@@ -1,7 +1,9 @@
-import type { Modality, RawBatch, RawRecord } from './types.ts';
+import { detectSpecialEntry } from './intent.ts';
+import type { Modality, RawBatch, RawRecord, RepaymentPart } from './types.ts';
 
 const MODALITIES: readonly Modality[] = ['text', 'voice', 'image'];
 const DIRECTIONS = ['expense', 'income'] as const;
+const REPAYMENT_PARTS: readonly RepaymentPart[] = ['principal', 'interest', 'mixed'];
 const ISO_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/;
 const MAX_RECORDS = 100;
@@ -56,17 +58,85 @@ function isIsoTime(value: unknown): value is string {
   return !Number.isNaN(Date.parse(value));
 }
 
-/** 金额必须是有限数字且最多两位小数；非法金额属于模块 1 的字段错误。 */
+/** 金额必须是有限数字、最多两位小数，且换算成分后仍在安全整数范围内。 */
 function isAmount(value: unknown): value is number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return false;
   }
   const scaled = value * 100;
-  return Math.abs(scaled - Math.round(scaled)) <= 1e-6;
+  const cents = Math.round(scaled);
+  return Math.abs(scaled - cents) <= 1e-6 && Number.isSafeInteger(cents);
 }
 
 function fail(message: string, field?: string): ParseResult {
   return { ok: false, message, field };
+}
+
+/**
+ * 校验契约 §1.3 的还款拆分字段。
+ *
+ * - 退款与普通消费不得携带拆分子段；
+ * - `mixed` 必须同时给出本金与利息，且两者之和等于 `amount`；
+ * - 只给一个分字段时，`amount` 必须等于该字段；
+ * - 返回值 `null` 表示通过。
+ */
+function validateRepaymentSplit(
+  rawText: string,
+  amount: number | null,
+  part: RepaymentPart | null,
+  principalCents: number | null,
+  interestCents: number | null,
+  prefix: string
+): ParseResult | null {
+  const declared = part !== null || principalCents !== null || interestCents !== null;
+  if (!declared) {
+    return null;
+  }
+
+  const special = detectSpecialEntry(rawText);
+  if (special === 'refund') {
+    return fail(`${prefix}.principalCents 不适用于退款记录`, `${prefix}.principalCents`);
+  }
+  // 既没显式声明还款、文本也不是还款时，拆分子段没有意义。
+  if (part === null && special === null) {
+    return fail(`${prefix}.principalCents 只适用于贷款还款`, `${prefix}.principalCents`);
+  }
+
+  const amountCents = amount === null ? null : Math.round(amount * 100);
+  const effectivePart: RepaymentPart =
+    part ?? (principalCents !== null ? (interestCents !== null ? 'mixed' : 'principal') : 'interest');
+
+  if (effectivePart === 'mixed') {
+    if (amountCents === null) {
+      return fail(`${prefix}.amount 混合还款必须提供金额`, `${prefix}.amount`);
+    }
+    if (principalCents === null || interestCents === null) {
+      const field = principalCents === null ? 'principalCents' : 'interestCents';
+      return fail(`${prefix}.${field} 混合还款必须同时提供本金与利息`, `${prefix}.${field}`);
+    }
+    if (principalCents + interestCents !== amountCents) {
+      return fail(`${prefix}.principalCents 与 interestCents 之和必须等于 amount`, `${prefix}.principalCents`);
+    }
+    return null;
+  }
+
+  if (effectivePart === 'interest') {
+    if (principalCents !== null && principalCents !== 0) {
+      return fail(`${prefix}.principalCents 纯利息还款不能包含本金`, `${prefix}.principalCents`);
+    }
+    if (interestCents !== null && amountCents !== null && interestCents !== amountCents) {
+      return fail(`${prefix}.interestCents 必须等于 amount`, `${prefix}.interestCents`);
+    }
+    return null;
+  }
+
+  if (interestCents !== null && interestCents !== 0) {
+    return fail(`${prefix}.interestCents 本金还款不能包含利息`, `${prefix}.interestCents`);
+  }
+  if (principalCents !== null && amountCents !== null && principalCents !== amountCents) {
+    return fail(`${prefix}.principalCents 必须等于 amount`, `${prefix}.principalCents`);
+  }
+  return null;
 }
 
 function parseDirection(value: unknown, index: number): ParseResult | RawRecord['direction'] {
@@ -138,6 +208,39 @@ function parseRecord(value: unknown, index: number): ParseResult | RawRecord {
     return fail(`${prefix}.originalTransactionId 必须是字符串或 null`, `${prefix}.originalTransactionId`);
   }
   if (
+    value.repaymentPart !== undefined &&
+    value.repaymentPart !== null &&
+    !(
+      typeof value.repaymentPart === 'string' &&
+      (REPAYMENT_PARTS as readonly string[]).includes(value.repaymentPart)
+    )
+  ) {
+    return fail(
+      `${prefix}.repaymentPart 只能是 principal / interest / mixed / null`,
+      `${prefix}.repaymentPart`
+    );
+  }
+  const principalCents = value.principalCents ?? null;
+  if (principalCents !== null && (!Number.isInteger(principalCents) || (principalCents as number) < 0)) {
+    return fail(`${prefix}.principalCents 必须是非负整数（分）`, `${prefix}.principalCents`);
+  }
+  const interestCents = value.interestCents ?? null;
+  if (interestCents !== null && (!Number.isInteger(interestCents) || (interestCents as number) < 0)) {
+    return fail(`${prefix}.interestCents 必须是非负整数（分）`, `${prefix}.interestCents`);
+  }
+  const repaymentPart = (value.repaymentPart ?? null) as RepaymentPart | null;
+  const splitError = validateRepaymentSplit(
+    value.rawText,
+    (value.amount ?? null) as number | null,
+    repaymentPart,
+    principalCents as number | null,
+    interestCents as number | null,
+    prefix
+  );
+  if (splitError !== null) {
+    return splitError;
+  }
+  if (
     value.confidence !== undefined &&
     value.confidence !== null &&
     (typeof value.confidence !== 'number' || value.confidence < 0 || value.confidence > 1)
@@ -154,6 +257,9 @@ function parseRecord(value: unknown, index: number): ParseResult | RawRecord {
     occurredAt: (value.occurredAt ?? null) as string | null,
     chatAt: (value.chatAt ?? null) as string | null,
     originalTransactionId: (value.originalTransactionId ?? null) as string | null,
+    repaymentPart,
+    principalCents: principalCents as number | null,
+    interestCents: interestCents as number | null,
     rawText: value.rawText,
     modality: modality as Modality,
     sourceRef: (value.sourceRef ?? null) as string | null,

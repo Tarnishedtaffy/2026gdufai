@@ -77,6 +77,10 @@ export interface TransactionInput {
   readonly updatedAt: string;
   readonly entryType: 'normal' | 'refund' | 'repayment';
   readonly matchedTransactionId: string | null;
+  /** 还款本金（分）；非还款记录为 null。 */
+  readonly principalCents: number | null;
+  /** 原贷款结清时间；仅原贷款可能非空。 */
+  readonly settledAt: string | null;
 }
 
 export interface TransactionView {
@@ -156,8 +160,8 @@ export function insertTransaction(db: Db, input: TransactionInput): void {
        (id, user_id, direction, direction_source, amount_cents, merchant, note,
         occurred_at, occurred_date, time_source, chat_at, category_id, category_source,
         category_confidence, status, source_modality, source_ref, idempotency_key, created_at, updated_at,
-        entry_type, matched_transaction_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?)`
+        entry_type, matched_transaction_id, principal_cents, settled_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     input.id,
     input.userId,
@@ -179,7 +183,9 @@ export function insertTransaction(db: Db, input: TransactionInput): void {
     input.createdAt,
     input.updatedAt,
     input.entryType,
-    input.matchedTransactionId
+    input.matchedTransactionId,
+    input.principalCents,
+    input.settledAt
   );
 }
 
@@ -229,9 +235,16 @@ export interface OriginalTransaction {
   readonly direction: Direction;
   readonly amountCents: number;
   readonly entryType: string;
+  readonly settledAt: string | null;
 }
 
-/** 作废原账单（软删除，统计排除）。 */
+/**
+ * 作废原账单（软删除，统计排除）。
+ *
+ * 仅供 intake 内部退款/还款流程调用：只把 `status='confirmed'` 的记录置为 `void`，
+ * 不校验 `entry_type`，也不返回 404/422。外部 API 的作废请走
+ * `transaction-edit.ts` 的 `voidTransactionById`（含幂等与错误码）。
+ */
 export function voidTransaction(db: Db, id: string, userId: string, updatedAt: string): void {
   db.prepare(
     "UPDATE transactions SET status = 'void', updated_at = ? WHERE id = ? AND user_id = ? AND status = 'confirmed'"
@@ -255,10 +268,17 @@ export function adjustTransactionAmount(
 export function getTransactionById(db: Db, id: string, userId: string): OriginalTransaction | null {
   const row = db
     .prepare(
-      'SELECT id, occurred_at, direction, amount_cents, entry_type FROM transactions WHERE id = ? AND user_id = ? AND status != ?'
+      'SELECT id, occurred_at, direction, amount_cents, entry_type, settled_at FROM transactions WHERE id = ? AND user_id = ? AND status != ?'
     )
     .get(id, userId, 'void') as
-    | { id: string; occurred_at: string; direction: Direction; amount_cents: number; entry_type: string }
+    | {
+        id: string;
+        occurred_at: string;
+        direction: Direction;
+        amount_cents: number;
+        entry_type: string;
+        settled_at: string | null;
+      }
     | undefined;
 
   if (row === undefined) {
@@ -269,8 +289,29 @@ export function getTransactionById(db: Db, id: string, userId: string): Original
     occurredAt: row.occurred_at,
     direction: row.direction,
     amountCents: row.amount_cents,
-    entryType: row.entry_type
+    entryType: row.entry_type,
+    settledAt: row.settled_at
   };
+}
+
+/** 统计某笔原贷款已归还的本金合计（只计有效的中性还款记录）。 */
+export function sumRepaidPrincipal(db: Db, originalTransactionId: string, userId: string): number {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(principal_cents), 0) AS total
+         FROM transactions
+        WHERE matched_transaction_id = ? AND user_id = ?
+          AND entry_type = 'repayment' AND status = 'confirmed'`
+    )
+    .get(originalTransactionId, userId) as { total: number };
+  return row.total;
+}
+
+/** 标记原贷款已结清（保留原单金额不变）。 */
+export function settleLoan(db: Db, id: string, userId: string, settledAt: string): void {
+  db.prepare(
+    "UPDATE transactions SET settled_at = ?, updated_at = ? WHERE id = ? AND user_id = ? AND status = 'confirmed'"
+  ).run(settledAt, settledAt, id, userId);
 }
 
 /** 按 id 读取账单视图，用于幂等重复时回显已有结果。 */

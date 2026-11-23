@@ -27,6 +27,7 @@ export interface TransactionItem {
   status: string;
   anomalyFlag: boolean;
   entryType: 'normal' | 'refund' | 'repayment';
+  settledAt: string | null;
 }
 
 export interface TransactionListResult {
@@ -45,6 +46,20 @@ export interface TransactionListResult {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LIMIT = 100;
+
+/** 校验 YYYY-MM-DD 是真实日历日期，拒绝 2026-02-31 这类会被 Date 滚动的输入。 */
+function isCalendarDate(value: string): boolean {
+  if (!DATE_RE.test(value)) {
+    return false;
+  }
+  const [year, month, day] = value.split('-').map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() + 1 === month &&
+    date.getUTCDate() === day
+  );
+}
 
 function invalid(message: string): never {
   throw new AppError('INVALID_QUERY_PARAM', 422, message);
@@ -90,6 +105,7 @@ interface ListRow {
   category_color: string | null;
   category_icon: string | null;
   entry_type: 'normal' | 'refund' | 'repayment';
+  settled_at: string | null;
 }
 
 /** 按契约 §2.3 返回账单一览：游标分页 + 整个筛选集汇总。 */
@@ -99,8 +115,8 @@ export function listTransactions(db: Db, userId: string, query: TransactionListQ
     invalid(`limit 必须是 1–${MAX_LIMIT} 的整数`);
   }
   for (const value of [query.from, query.to]) {
-    if (value !== undefined && !DATE_RE.test(value)) {
-      invalid('from/to 必须是 YYYY-MM-DD');
+    if (value !== undefined && !isCalendarDate(value)) {
+      invalid('from/to 必须是真实日历日期 YYYY-MM-DD');
     }
   }
   if (query.from !== undefined && query.to !== undefined && query.from > query.to) {
@@ -159,6 +175,7 @@ export function listTransactions(db: Db, userId: string, query: TransactionListQ
     .prepare(
       `SELECT t.id, t.direction, t.amount_cents, t.merchant, t.occurred_at, t.occurred_date,
               t.category_confidence, t.source_modality, t.source_ref, t.status, t.anomaly_flag, t.entry_type,
+              t.settled_at,
               c.id AS category_id, c.name AS category_name, c.color AS category_color, c.icon AS category_icon
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
@@ -203,8 +220,17 @@ export function listTransactions(db: Db, userId: string, query: TransactionListQ
     sourceRef: row.source_ref,
     status: row.status,
     anomalyFlag: row.anomaly_flag === 1,
-    entryType: row.entry_type
+    entryType: row.entry_type,
+    settledAt: row.settled_at
   }));
+
+  const anyRow = db
+    .prepare(
+      `SELECT EXISTS(
+         SELECT 1 FROM transactions t WHERE ${baseConditions.join(' AND ')}
+       ) AS present`
+    )
+    .get(...baseParams) as { present: number };
 
   return {
     filter: {
@@ -225,6 +251,6 @@ export function listTransactions(db: Db, userId: string, query: TransactionListQ
       hasMore,
       nextCursor: hasMore && lastRow !== undefined ? encodeCursor(lastRow.occurred_date, lastRow.id) : null
     },
-    meta: { unit: 'cent', isEmpty: summaryRow.count === 0 }
+    meta: { unit: 'cent', isEmpty: anyRow.present === 0 }
   };
 }

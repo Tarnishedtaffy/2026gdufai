@@ -10,6 +10,9 @@ export function yuanToCents(yuan: number): number {
   if (Math.abs(scaled - cents) > 1e-6) {
     throw new RangeError(`金额最多两位小数，当前值: ${yuan}`);
   }
+  if (!Number.isSafeInteger(cents)) {
+    throw new RangeError(`金额超出安全整数范围，当前值: ${yuan}`);
+  }
   return cents;
 }
 

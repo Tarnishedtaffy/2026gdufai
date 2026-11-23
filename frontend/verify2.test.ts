@@ -68,11 +68,11 @@ describe('B3 入站类型', () => {
 });
 
 describe('B4 色值', () => {
-  it('12 个色值逐字对齐契约', () => {
-    const contract = ['#F97316','#3B82F6','#EC4899','#10B981','#8B5CF6','#EF4444','#F59E0B','#6B7280','#22C55E','#F472B6','#9CA3AF','#0EA5E9'];
+  it('13 个色值逐字对齐契约', () => {
+    const contract = ['#F97316','#3B82F6','#EC4899','#10B981','#8B5CF6','#EF4444','#F59E0B','#6B7280','#22C55E','#F472B6','#9CA3AF','#0EA5E9','#14B8A6'];
     const cats = mockGetCategories();
     const actual = cats.map(c => c.color);
-    expect(cats).toHaveLength(12);
+    expect(cats).toHaveLength(13);
     expect(actual).toEqual(contract);
     expect(cats.every(c => 'isPreset' in c && 'isActive' in c)).toBe(true);
   });

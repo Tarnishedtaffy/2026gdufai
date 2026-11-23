@@ -14,6 +14,11 @@ it.each([
   await expect(request('/api/demo')).rejects.toMatchObject({ code });
 });
 
+it('204 空响应直接返回，不按 JSON 解析报 INVALID_RESPONSE', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })));
+  await expect(request('/api/categories/14')).resolves.toBeUndefined();
+});
+
 it('M2 真正返回 INVALID_BATCH 时保留其业务码和字段', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: {
     code: 'INVALID_BATCH', message: '缺少发送时间', field: 'sentAt',

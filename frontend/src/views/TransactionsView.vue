@@ -63,7 +63,7 @@ onMounted(() => {
     <div v-else class="list">
       <article v-for="tx in items" :key="tx.id" class="tx-card">
         <div class="tx-main">
-          <span class="cat-pill" :style="{ '--cat-color': tx.category.color }">{{ tx.category.name }}</span>
+          <span class="cat-pill" :style="{ '--cat-color': tx.category?.color ?? '#6B7280' }">{{ tx.category?.name ?? '未分类' }}</span>
           <strong>{{ tx.merchant ?? '—' }}</strong>
         </div>
         <div class="tx-meta">

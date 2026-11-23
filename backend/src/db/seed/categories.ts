@@ -11,7 +11,7 @@ export interface SeedCategory {
   readonly keywords: readonly string[];
 }
 
-/** 契约第 3 节冻结的 12 个预设类别，ID 固定不可变。 */
+/** 契约第 3 节冻结的 13 个预设类别，ID 固定不可变；自定义类别从 14 起。 */
 export const PRESET_CATEGORIES: readonly SeedCategory[] = [
   { id: 1, name: '餐饮', kind: 'expense', color: '#F97316', icon: '🍜', sortOrder: 1,
     keywords: ['早餐', '午餐', '晚餐', '夜宵', '外卖', '餐厅', '饭店', '食堂', '咖啡', '奶茶', '瑞幸', '星巴克', '麦当劳', '肯德基', '火锅', '烧烤', '聚餐', 'AA'] },
@@ -35,7 +35,9 @@ export const PRESET_CATEGORIES: readonly SeedCategory[] = [
   { id: 11, name: '其他收入', kind: 'income', color: '#9CA3AF', icon: '➕', sortOrder: 11,
     keywords: ['利息', '分红', '基金', '股票', '理财', '收益', '报销'] },
   { id: 12, name: '贷款', kind: 'income', color: '#0EA5E9', icon: '🏦', sortOrder: 12,
-    keywords: ['贷款', '借款', '借到', '放款', '下款', '借钱'] }
+    keywords: ['贷款', '借款', '借到', '放款', '下款', '借钱'] },
+  { id: 13, name: '贷款利息', kind: 'expense', color: '#14B8A6', icon: '🧾', sortOrder: 13,
+    keywords: ['贷款利息', '借款利息', '房贷利息', '还款利息', '利息支出', '分期利息', '还利息', '付利息', '还息'] }
 ];
 
 /** 幂等写入预设类别：已存在则跳过，不覆盖用户改过的颜色或关键词。 */

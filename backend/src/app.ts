@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { loadAiConfig, type AppConfig } from './config/index.ts';
 import type { Db } from './db/client.ts';
+import { registerBudgetRoutes } from './modules/budget/routes.ts';
 import {
   createCaptureExtractor,
   createOpenAiCompatibleProvider,
@@ -54,6 +55,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   });
 
   void app.register(registerLedgerRoutes);
+  void app.register(registerBudgetRoutes);
   void app.register(registerCaptureRoutes, { extractor: captureExtractor });
 
   app.setErrorHandler((error, request, reply) => {
@@ -65,6 +67,19 @@ export function buildApp(deps: AppDeps): FastifyInstance {
           field: error.field,
           ...(error.details === undefined ? {} : { details: error.details })
         }
+      });
+      return;
+    }
+    const statusCode =
+      typeof (error as { statusCode?: unknown }).statusCode === 'number'
+        ? (error as { statusCode: number }).statusCode
+        : 500;
+    if (statusCode < 500) {
+      // Fastify 自身的 4xx（如 JSON 解析失败）不能把内部错误码泄漏给客户端。
+      const code =
+        statusCode === 401 ? 'UNAUTHORIZED' : statusCode === 422 ? 'INVALID_QUERY_PARAM' : 'INVALID_BATCH';
+      void reply.status(statusCode).send({
+        error: { code, message: '请求格式不正确' }
       });
       return;
     }

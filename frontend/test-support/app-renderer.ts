@@ -17,6 +17,7 @@ export class TestNode {
   constructor(public kind: string, public text = '') {}
   get tagName() { return this.kind.toUpperCase(); }
   get options(): TestNode[] { return this.children.flatMap(child => child.kind === 'option' ? [child] : child.options); }
+  getRootNode(): TestNode { return this.parent?.getRootNode() ?? this; }
   addEventListener(name: string, callback: (event: unknown) => void) { (this.listeners[name] ??= []).push(callback); }
   removeEventListener() {}
   setAttribute(name: string, value: unknown) { this.props[name] = value; }

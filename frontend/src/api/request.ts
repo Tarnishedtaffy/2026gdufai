@@ -69,6 +69,9 @@ export async function request<T>(path: string, config: RequestConfig = {}): Prom
   }
 
   let payload: unknown = null;
+  if (response.status === 204) {
+    return undefined as T;
+  }
   try {
     payload = await response.json();
   } catch {

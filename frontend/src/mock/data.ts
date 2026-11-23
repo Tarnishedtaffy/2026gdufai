@@ -15,6 +15,7 @@ export const MOCK_CATEGORIES = [
   { id: 10, name: '转账', kind: 'income', color: '#F472B6', icon: 'swap', isPreset: true, isActive: true },
   { id: 11, name: '其他收入', kind: 'income', color: '#9CA3AF', icon: 'plus', isPreset: true, isActive: true },
   { id: 12, name: '贷款', kind: 'income', color: '#0EA5E9', icon: 'bank', isPreset: true, isActive: true },
+  { id: 13, name: '贷款利息', kind: 'expense', color: '#14B8A6', icon: 'receipt', isPreset: true, isActive: true },
 ] as const satisfies readonly CategoryItem[];
 
 export const MOCK_TRANSACTIONS: TransactionItem[] = [
@@ -107,6 +108,7 @@ export const MOCK_TRANSACTIONS: TransactionItem[] = [
 export const MOCK_BUDGETS_BY_MONTH: Record<string, BudgetItem[]> = {
   '2026-11': [
     {
+      id: 1,
       scope: 'total',
       category: null,
       amountCents: 150000,
@@ -114,24 +116,29 @@ export const MOCK_BUDGETS_BY_MONTH: Record<string, BudgetItem[]> = {
       remainingCents: 117650,
       usageRatio: 0.2157,
       level: 'normal',
+      alertThresholds: [80, 100],
     },
     {
+      id: 2,
       scope: 'category',
-      category: { id: 1, name: '餐饮', color: '#F97316', icon: 'utensils' },
+      category: { id: 1, name: '餐饮' },
       amountCents: 8000,
       spentCents: 6250,
       remainingCents: 1750,
       usageRatio: 0.7813,
       level: 'near',
+      alertThresholds: [80, 100],
     },
     {
+      id: 3,
       scope: 'category',
-      category: { id: 3, name: '购物', color: '#EC4899', icon: 'bag' },
+      category: { id: 3, name: '购物' },
       amountCents: 15000,
       spentCents: 16800,
       remainingCents: -1800,
       usageRatio: 1.12,
       level: 'over',
+      alertThresholds: [80, 100],
     },
   ],
 };

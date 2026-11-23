@@ -85,6 +85,18 @@ describe('GET /api/transactions', () => {
     expect(result.body.items.every((item: { category: { id: number } }) => item.category.id === 1)).toBe(true);
   });
 
+  it('中性记录列表非空时 isEmpty 为 false，summary 仍为 0', async () => {
+    const result = await list('entryType=refund');
+    expect(result.body.items.map((item: { id: string }) => item.id)).toEqual(['tx_refund']);
+    expect(result.body.summary.count).toBe(0);
+    expect(result.body.meta.isEmpty).toBe(false);
+  });
+
+  it('拒绝 2026-02-31 这类不存在的日期', async () => {
+    const result = await list('from=2026-02-31&to=2026-03-01');
+    expect(result.status).toBe(422);
+  });
+
   it('空结果标记 isEmpty', async () => {
     const result = await list('from=2020-01-01&to=2020-01-31');
     expect(result.body.items).toEqual([]);

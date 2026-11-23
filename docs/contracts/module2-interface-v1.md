@@ -1,8 +1,8 @@
 # 模块 2 接口交接文档
 
 > 适用对象：模块 1（语音/文字/图片记账）、模块 3（自然语言查账）、模块 4（预算提醒，同进程）
-> 文档版本：v1.4（退款/还款按金额三态处理：等额作废原单、少于原单调整金额、超出部分记收入/支出）
-> 冻结依据：contract-change issue #21（v1.4 退款三态）；#16 为 v1.3 中性记录基线
+> 文档版本：v1.5（贷款利息类别 13、`settled_at` 结清标记、`repaymentPart` 入站字段、贷款还款口径 1D/2C）
+> 冻结依据：contract-change issue #23（v1.5）；#21 为 v1.4 退款三态基线
 > 维护人：模块 2 负责人
 > 状态：接口定义已冻结；服务端实现按本文档开发中，联调前以本文档为准
 
@@ -86,6 +86,31 @@
 | `sourceRef` | 记录 | 否 | string \| `null` | 语音/图片文件路径，**不要把文件内容 base64 塞进 JSON** |
 | `confidence` | 记录 | 否 | number 0–1 \| `null` | 模块 1 对整条抽取的置信度，仅作参考 |
 | `idempotencyKey` | 记录 | 是 | string | **同一笔重发必须相同**，模块 2 据此去重 |
+| `repaymentPart` | 记录 | 否 | `"principal"` \| `"interest"` \| `"mixed"` \| `null` | 贷款还款的本金/利息属性，仅作提示；`interest` 表示纯利息支付，不进入中性还款流程；不传时按关键词兜底 |
+| `principalCents` | 记录 | 否 | integer ≥ 0 \| `null` | 本次还款中的本金（分）；与 `interestCents` 之和必须等于 `yuanToCents(amount)` |
+| `interestCents` | 记录 | 否 | integer ≥ 0 \| `null` | 本次还款中的利息（分）；只生成类别 13 的支出，不参与剩余本金计算 |
+
+> **还款拆分字段校验**：
+>
+> - `mixed` 时 `principalCents` / `interestCents` 必填，且 `principalCents + interestCents === yuanToCents(amount)`；
+> - `repaymentPart='interest'` 时 `principalCents` 为空或 `0`；`repaymentPart='principal'` 时 `interestCents` 为空或 `0`；
+> - 只给 `principalCents` 与 `interestCents`、未给 `repaymentPart` 时按 `mixed` 处理；
+> - 只给一个分字段时，`amount` 必须等于该字段；
+> - `mixed` 且 `amount=null` → `INVALID_BATCH`（`field: records[i].amount`）；
+> - 普通消费/退款传这些字段 → `INVALID_BATCH`（`field: records[i].principalCents`）；
+> - `principalCents > outstandingCents` → `INVALID_BATCH`（`field: records[i].principalCents`）；
+> - 显式字段与文本冲突时以显式字段为准。
+>
+> **本金规范化与落库**：
+>
+> ```text
+> effectivePrincipalCents =
+>   principalCents                     // 显式给出
+>   interest 且未给本金时 0             // 纯利息，不写中性还款记录
+>   未拆分但按还款处理时 yuanToCents(amount)
+> ```
+>
+> 落库 `principal_cents = effectivePrincipalCents`，**不得因客户端省略字段而写 `NULL`**；`mixed` 缺任一项直接拒绝，不自动猜。
 
 > **关于 `direction` 可以传 `null`**：`null` 只出现在**入站**，含义是「模块 1 没有判定」，不是脏数据。模块 2 收到后按优先级解析：类别能识别就用类别 kind 推断；类别也识别不出时兜底到「其他」并按 `expense` 推断。`MISSING_DIRECTION` 保留但当前不可达（见 §1.5），因此 **`transactions.direction` 是非空字段，入库前方向必然已经确定**，不存在把 `null` 写进库的路径。
 >
@@ -115,6 +140,8 @@
 ```
 
 `matchedTransactionId`：匹配到的原账单 id；未匹配或普通记账为 `null`。
+
+`interestTransactionId`：本次还款产生的利息记录 id；无利息为 `null`。
 
 `status` 四种取值：
 
@@ -150,14 +177,18 @@
 | `TIME_DEFAULTED_TO_CHAT_TIME` | 时间追问不清，已回退聊天时间 | warning | 「时间我按你发消息的时间记了」 |
 | `DIRECTION_FORCED_BY_CATEGORY` | 冲突二次以类别为准 | warning | 「按类别记成了收入」 |
 | `DUPLICATE_RECORD` | 幂等键重复 | warning | 「这笔已经记过了」 |
-| `MISSING_ORIGINAL_TRANSACTION` | 退款/还款但缺少原账单 id（首轮） | blocking | 「这笔退款对应哪一笔账单？可以补充金额或日期」 |
-| `ORIGINAL_NOT_FOUND` | 带了原账单 id 但不存在、已作废或超过 30 天（首轮） | blocking | 「没找到这笔原账单，请从账单列表重新选择」 |
+| `MISSING_ORIGINAL_TRANSACTION` | 退款/还款但缺少原账单 id（首轮） | blocking | 「这笔退款对应哪一笔账单？请从账单列表重新选择原账单（originalTransactionId）」 |
+| `ORIGINAL_NOT_FOUND` | 带了原账单 id 但不存在、已作废或非 normal（首轮） | blocking | 「没找到这笔原账单，请从账单列表重新选择」 |
 | `REFUND_RECORDED_NEUTRAL` | 退款已记录为中性，匹配到原账单 | warning | 「已记录为中性，不计入收支；原账单已自动作废」 |
-| `REPAYMENT_RECORDED_NEUTRAL` | 还款已记录为中性，匹配到原账单 | warning | 「已记录为中性，不计入收支；原贷款账单已自动作废」 |
+| `REPAYMENT_RECORDED_NEUTRAL` | 还款已记录为中性，匹配到原账单 | warning | 「已记录为中性，不计入收支；原贷款已标记结清（settled_at）」 |
 | `ORIGINAL_NOT_FOUND_RECORDED` | 未匹配到原账单，已归入「其他/其他收入」 | warning | 「没找到原账单，已记为其他且不计收支」 |
-| `ORIGINAL_AMOUNT_ADJUSTED` | 退款/还款金额小于原账单，已把原账单金额改为剩余金额 | warning | 「已按差额调整原账单金额」 |
+| `ORIGINAL_AMOUNT_ADJUSTED` | 退款金额小于原账单，已把原账单金额改为剩余金额（v1.5 仅退款；v1.4 历史还款也使用） | warning | 「已按差额调整原账单金额」 |
 | `REFUND_EXCESS_AS_INCOME` | 退款金额大于原账单，多余部分已计入收入 | warning | 「超出原账单的部分已计入收入」 |
-| `REPAYMENT_EXCESS_AS_EXPENSE` | 还款金额大于原贷款，多余部分已计入支出 | warning | 「超出贷款本金的部分已计入支出」 |
+| `REPAYMENT_EXCESS_AS_EXPENSE` | **deprecated**：v1.5 起还款本金超额返回 `INVALID_BATCH`；该码仅解释 v1.4 历史回执 | warning | 「超出贷款本金的部分已计入支出」 |
+| `ORIGINAL_TRANSACTION_AGED` | 原账单距今超过 365 天，仍匹配成功 | warning | 「这笔原账单较早，请确认」 |
+| `PARTIAL_REPAYMENT_RECORDED` | 贷款部分还款，尚未结清 | warning | 「已记录本次还款，贷款尚未结清」 |
+| `AMBIGUOUS_LOAN_PAYMENT` | 本金/利息无法区分 | blocking | 「这笔是还本金还是还利息？」 |
+| `ORIGINAL_ALREADY_SETTLED` | 原贷款已结清 | blocking | 「这笔贷款已结清，无需再还款」 |
 
 > `MISSING_DIRECTION`：兜底到「其他」视为类别识别成功，**不返回该码**；该码保留但当前不可达，存废由 issue #12 决议。
 >
@@ -170,12 +201,24 @@
 - 第 2 轮起，如果时间仍为空或在未来，模块 2 会用 `chatAt`（或批次 `sentAt`）兜底入库，并回 `TIME_DEFAULTED_TO_CHAT_TIME`。
 - 同一笔最多追问 **2 次**：第 1、2 次提交返回 `pending_followup`；第 3 次提交仍无法解决时返回 `rejected`，模块 1 提示用户手动补录。轮次由模块 2 按幂等键维护。
 - 幂等重发时，`feedback` **按原样返回**（保留 `field`、`severity` 与 `candidates`），不得只回 `code`；模块 2 需在 `intake_log` 中保存完整 feedback 对象。
+- 派生记录使用独立幂等键：中性本金记录用 `${idempotencyKey}`，利息记录用 `${idempotencyKey}#interest`，退款超额记录用 `${idempotencyKey}#excess`。重发按主幂等键返回 `duplicate`，并回显 `interestTransactionId`。
 
 ### 1.7 模块 1 必须守的三条
 
 1. **空就是 `null`**，不要用 `0`、`""`、`"未知"` 填充——模块 2 靠 `null` 判断「缺失」，填了假值会被当成真实数据。
 2. **金额传元、不要传分**，也不要自己四舍五入到整数。
 3. **重发必带原 `idempotencyKey`**，否则同一笔会被记两次；模块 2 无法替你纠正。
+
+### 1.8 原账单匹配（1D）
+
+退款/还款只接受显式 `originalTransactionId`，**不做**按金额/日期的自动匹配，也不设固定时间上限。匹配规则：
+
+- 原账单 `occurredAt` 在未来（`Date.parse(original.occurredAt) > now`）→ 按 `ORIGINAL_NOT_FOUND` 处理；
+- 原账单距今超过 365 天：warning `ORIGINAL_TRANSACTION_AGED`，仍允许继续；
+- 按 id 查询保留「已结清」信息，不因 `settled_at` 非空而隐藏：
+  - 存在但已结清 → `ORIGINAL_ALREADY_SETTLED`（blocking）；
+  - 不存在、跨用户或已作废 → `ORIGINAL_NOT_FOUND`（blocking）；
+  - 已结清与「不存在/跨用户/已作废」必须区分，不能合并成 `ORIGINAL_NOT_FOUND`。
 
 ---
 
@@ -242,6 +285,7 @@
 
 - **金额字段全部是「分」**（`meta.unit = "cent"`），展示前除以 100。
 - `netCents = incomeCents - expenseCents`，可为负，**不要叫「余额」**。
+- `netCents` 是「**项目收支净额（排除中性本金还款）**」，不等于现金流，也不等于损益；贷款本金仍记收入，真正的现金流/负债模型留给后续 `loans` 维度。
 - `ratio` 分母是**同方向**合计：支出类别 ÷ `expenseCents`，收入类别 ÷ `incomeCents`。
 - `meta.isEmpty = true` 时回答「这个月还没有记录」，而不是「花了 0 元」。`meta.isEmpty` 依据**区间内是否有任何记录（含中性记录）**，并跟随 `direction` / `categoryIds` 筛选；它不等同于 `summary.count === 0`。`meta.isEmpty` 只表示**区间内没有任何记录**（含退款/还款中性记录），因此可能与 `summary.count = 0` 同时出现「有记录但无收支」的情况。
 - 想回答「哪类花得最多」，直接读 `summary.topCategory`，不要遍历 `buckets` 自己排。
@@ -267,7 +311,7 @@
       "direction": "expense",
       "category": { "id": 1, "name": "餐饮", "color": "#F97316", "icon": "🍜" },
       "sourceModality": "image", "sourceRef": "uploads/2026/11/r.jpg",
-      "entryType": "normal",
+      "entryType": "normal", "settledAt": null,
       "categoryConfidence": 0.92, "status": "confirmed", "anomalyFlag": false }
   ],
   "page": { "limit": 20, "hasMore": true, "nextCursor": "eyJkIjoiMjAyNi0xMS0xNCIsImlkIjoidHhfLi4uIn0" },
@@ -292,10 +336,15 @@
 
 ```jsonc
 [ { "id": 1, "scope": "total", "category": null, "amountCents": 300000,
-    "spentCents": 268400, "remainingCents": 31600, "usageRatio": 0.895, "level": "near" } ]
+    "spentCents": 268400, "remainingCents": 31600, "usageRatio": 0.895, "level": "near",
+    "alertThresholds": [80, 100] } ]
 ```
 
-`level`：`normal` / `near`（≥80%）/ `over`（≥100%）。
+- `level`：`normal` / `near`（≥80%）/ `over`（≥100%）；
+- `category` 统一为 `{ "id": 1, "name": "餐饮" }` 或 `null`；`scope=total` 时必为 `null`，且不返回 `kind`/`color`/`icon`；
+- `spentCents` 只统计 `direction='expense'`、`entry_type='normal'`、`status='confirmed'` 的账单，按 `occurred_date` 的 `Asia/Shanghai` 自然月聚合；
+- `remainingCents = amountCents - spentCents`，允许为负；
+- `alertThresholds` 为该预算已保存的阈值，去重升序；空数组表示关闭该预算的提醒；该字段随 `GET`/`PUT` 返回，便于前端回显。
 
 ### 2.6 错误格式
 
@@ -310,8 +359,9 @@
 | `INVALID_QUERY_PARAM` | 422 | 查询参数非法（分页、筛选、游标等） |
 | `CATEGORY_NOT_FOUND` | 404 | 类别不存在 |
 | `CATEGORY_IN_USE` | 409 | 删除有数据的类别，返回 `counts` |
+| `TRANSACTION_NOT_FOUND` | 404 | 账单不存在，`field` 为 `id` |
 | `CATEGORY_NAME_TAKEN` | 409 | 同一 `kind` 下类别重名 |
-| `CATEGORY_PRESET_PROTECTED` | 403 | 尝试删除预设类别 |
+| `CATEGORY_PRESET_PROTECTED` | 403 | 尝试删除或迁移预设类别 |
 | `CATEGORY_KIND_MISMATCH` | 409 | 迁移类别（`reassign`）时，目标类别 `kind` 与账单 `direction` 不一致 |
 | `BUDGET_NOT_FOUND` | 404 | 预算不存在 |
 | `BUDGET_CONFLICT` | 409 | 迁移预算时目标类别同月已有预算，`details` 返回冲突双方预算 id |
@@ -339,34 +389,34 @@
 | POST | `/api/categories/:id/reassign` | 200 | 批量迁移账单、预算与学习规则到目标类别 |
 
 ```jsonc
-// 创建（ID 12 已被「贷款」占用，自定义类别从 13 起自增）
+// 创建（ID 12/13 已被「贷款」「贷款利息」占用，自定义类别从 14 起自增）
 POST /api/categories
 { "name": "宠物", "kind": "expense", "color": "#0EA5E9", "icon": "🐱",
   "keywords": ["狗粮", "猫粮"], "sortOrder": 20 }
-→ 201 { "id": 13, "name": "宠物", "kind": "expense", "color": "#0EA5E9",
+→ 201 { "id": 14, "name": "宠物", "kind": "expense", "color": "#0EA5E9",
         "icon": "🐱", "isPreset": false, "isActive": true }
 
 // 修改：kind 创建后不可变，传 kind 返回 422
-PATCH /api/categories/13
+PATCH /api/categories/14
 { "name": "宠物开销", "color": "#0284C7", "isActive": false }
-→ 200 { "id": 13, "name": "宠物开销", "kind": "expense", "color": "#0284C7",
+→ 200 { "id": 14, "name": "宠物开销", "kind": "expense", "color": "#0284C7",
         "icon": "🐱", "isPreset": false, "isActive": false }
 
 // 删除：成功 204 无响应体；有引用返回 409
-DELETE /api/categories/13
+DELETE /api/categories/14
 → 204
 → 409 { "error": { "code": "CATEGORY_IN_USE", "message": "类别下还有账单", "field": "categoryId",
                     "details": { "counts": { "transactions": 10, "budgets": 1, "rules": 3 } } } }
 
 // 迁移：账单、预算、学习规则一起迁到目标类别
-POST /api/categories/13/reassign
+POST /api/categories/14/reassign
 { "targetCategoryId": 5 }
 → 200 { "targetCategoryId": 5, "movedTransactions": 12, "movedBudgets": 1, "movedRules": 3 }
 ```
 
 规则：
 
-- 预设类别（`isPreset=true`）只能停用，删除返回 `403 CATEGORY_PRESET_PROTECTED`；
+- 预设类别（`isPreset=true`）只能停用，删除或作为 `POST /reassign` 的源均返回 `403 CATEGORY_PRESET_PROTECTED`；
 - 同一 `kind` 下类别名唯一，重名返回 `409 CATEGORY_NAME_TAKEN`；
 - `PATCH` 不允许修改 `kind`：`kind` 创建后不可变，传入返回 `422 INVALID_QUERY_PARAM`（`field: kind`）；
 - 删除前统计三类引用：`counts.transactions` **包含 `status='void'` 的已作废账单**（作废只改状态，仍保留 `category_id` 引用）；`counts.budgets`、`counts.rules` 同样统计全部引用；
@@ -394,7 +444,7 @@ PUT /api/budgets
   "amountCents": 100000, "alertThresholds": [80, 100] }
 → 200 { "id": 7, "scope": "category", "category": { "id": 1, "name": "餐饮" },
         "amountCents": 100000, "spentCents": 98000, "remainingCents": 2000,
-        "usageRatio": 0.98, "level": "near" }
+        "usageRatio": 0.98, "level": "near", "alertThresholds": [80, 100] }
 
 DELETE /api/budgets/7
 → 204
@@ -402,11 +452,15 @@ DELETE /api/budgets/7
 
 规则：
 
+- `GET` / `PUT` 的响应顶层都包含上例全部字段，`id` 供 `DELETE` 使用；
 - `scope=total` 时 `categoryId` 必须为 `null`；`scope=category` 必须提供 `categoryId`，否则 `422 INVALID_QUERY_PARAM`；
+- `scope=category` 时目标类别必须存在且 `kind='expense'`；不存在返回 `404 CATEGORY_NOT_FOUND`，收入类别返回 `422 INVALID_QUERY_PARAM`（`field: categoryId`）；
 - `amountCents` 必须是**正整数**（单位分，且 > 0），非法返回 `422 INVALID_QUERY_PARAM`（`field: amountCents`）；
-- `alertThresholds` 为 **1–200 的整数数组**，去重后升序存储，最多 5 个，缺省 `[80, 100]`；越界、非整数或超过 5 个返回 `422 INVALID_QUERY_PARAM`（`field: alertThresholds`）。该范围与 `budget_alerts.threshold` 的 `CHECK (BETWEEN 1 AND 200)` 保持一致；
+- `alertThresholds` 为 **1–200 的整数数组**，去重后升序存储，最多 5 个，缺省 `[80, 100]`；**空数组表示关闭该预算的提醒**（不写入任何告警）；越界、非整数或超过 5 个返回 `422 INVALID_QUERY_PARAM`（`field: alertThresholds`）。该范围与 `budget_alerts.threshold` 的 `CHECK (BETWEEN 1 AND 200)` 保持一致；
 - 同一 `(month, scope, categoryId)` 幂等覆盖，不产生重复预算，响应始终包含预算 `id`，供 `DELETE /api/budgets/:id` 使用；
-- 删除不存在的预算返回 `404 BUDGET_NOT_FOUND`；删除成功返回 `204` 无响应体。
+- 删除不存在的预算返回 `404 BUDGET_NOT_FOUND`；删除成功返回 `204` 无响应体；
+- 预算读写接口不使用 `409`；`BUDGET_CONFLICT` 只用于类别迁移（§2.7）的目标同月预算冲突；
+- 本期不提供告警查询端点；告警由 `PUT /api/budgets` 触发；M2 账单写操作接入（#38）后，由 `recalcBudgetForTransaction` / `recalcBudgetsForMonth` 在账单写入/变更后触发，写入 `budget_alerts` 供后续通知模块消费。
 
 ## 2.9 账单纠错
 
@@ -439,9 +493,14 @@ POST /api/transactions/tx_xxx/void
 
 规则：
 
+- PATCH 请求体必须是普通对象，且至少包含 `categoryId` / `amountCents` / `merchant` / `occurredAt` 之一，否则 `422 INVALID_QUERY_PARAM`（`field: body`）；
 - 仅 `status='confirmed'` 的账单可修改；已作废账单返回 `422 INVALID_QUERY_PARAM`（`field: status`）；
+- 中性记录（`entry_type != 'normal'`，含 `refund` / `repayment`）不允许 PATCH 或 void，返回 `422 INVALID_QUERY_PARAM`（`field: entryType`）；中性 `repayment` 的撤销由 PR-C 承载（PR-C 落地后允许作废，重算原贷款 `settled_at`，并作废 `${idempotencyKey}#interest` 记录），本端点届时扩展；
+- 校验顺序：先判 `entry_type`，再判 `status`；两者同时命中时返回 `field: entryType`；
+- 作废原贷款：关联还款与利息记录保留，但不再参与剩余本金计算；
 - `void` 幂等：重复调用返回 `200` 与当前 `status='void'`，不重复写入学习规则；
-- 修改分类时写入 `user_category_rules`（下次同商户自动命中）；改到另一侧 `kind` 时翻转 `direction` 并重算当月预算；作废后该账单从统计与预算中排除，但记录保留。
+- `occurredAt` 目前允许未来时间是有意为之（与导入路径的 `FUTURE_TIME` 校验区分），便于用户补录计划内账单；
+- 修改分类时写入 `user_category_rules`（下次同商户自动命中）；只有类别实际变化时才写入并递增 `hit_count`，同时把 `category_source` 置为 `manual`、`category_confidence` 置为 `NULL`；改到另一侧 `kind` 时翻转 `direction`、把 `direction_source` 置为 `category` 并重算当月预算；作废后该账单从统计与预算中排除，但记录保留。
 
 ---
 
@@ -468,10 +527,30 @@ POST /api/transactions/tx_xxx/void
 | 10 | 转账 | `#F472B6` | 转账、收款、入账、红包、礼金、压岁钱 |
 | 11 | 其他收入 | `#9CA3AF` | 利息、分红、基金、股票、理财、收益、报销 |
 | 12 | 贷款 | `#0EA5E9` | 贷款、借款、借到、放款、下款、借钱 |
+| 13 | 贷款利息 | `#14B8A6` | 贷款利息、借款利息、房贷利息、还款利息、利息支出、分期利息、还利息、付利息、还息 |
 
-> 口径说明：**转账计入收入**；**贷款计入收入**；**退款/还款**：金额等于原账单 → 作废原单 + 中性记录；金额小于原账单 → 把原单金额改为剩余金额 + 中性记录；金额大于原账单 → 作废原单 + 中性记录，超出部分按**收入（退款）/支出（还款）**入账。超出时会产生**两条记录**（中性记录 + 超出部分的 `normal` 记录），两条的 `note` 都是原始文本。
+> 自定义类别从 **14** 起自增；预设 13 冻结占用。类别 13 的关键词**不包含裸「利息」**，避免与类别 11「其他收入」竞争。
+
+> 口径说明（v1.5）：**转账计入收入**；**贷款计入收入**；**退款**保持 v1.4 三态（等额作废 / 小于调整原单金额 / 大于作废 + 超出记收入）；**还款**保留原贷款、写 `settled_at`、不改原单金额。
 >
-> **v1.5 预告**：贷款还款的「作废/改额」口径将调整为「保留原单 + 结清标记」，见 #22；v1.4 先按本表执行，退款逻辑不受该调整影响。
+> 还款计算：
+>
+> ```text
+> outstandingCents = 原贷款金额 - SUM(principal_cents)
+> diffCents = (principalCents ?? yuanToCents(amount)) - outstandingCents
+> ```
+>
+> 判断顺序：**先**判「未提供拆分且 `yuanToCents(amount) > outstandingCents`」→ `AMBIGUOUS_LOAN_PAYMENT`；**再**判「显式 `principalCents > outstandingCents`」→ `INVALID_BATCH`。
+>
+> - `diffCents = 0`：写 `settled_at`，返回 `REPAYMENT_RECORDED_NEUTRAL`；
+> - `diffCents < 0`：返回 `PARTIAL_REPAYMENT_RECORDED`；
+> - `diffCents > 0`：理论上不可达（前面已按未拆分/显式本金分别拦截）；若出现，返回 `INVALID_BATCH`（`field: records[i].principalCents`）；
+> - `interestCents` 只生成类别 13 的 `entry_type='normal'` 支出，**不参与** `outstanding`、`settled_at`、超额判断；
+> - 退款超额仍产生两条记录：中性记录 + 超出部分的 `normal` 记录。
+>
+> **现金流口径**：贷款本金记收入、还款本金记中性、利息记支出，`netCents` 是「项目收支净额（排除中性本金还款）」，不等于现金流，也不等于损益；真正的负债/损益模型留给后续 `loans` 维度。
+>
+> **v1.5 已生效**：贷款还款改为「保留原单 + `settled_at`」；退款仍按三态（等额作废 / 小于调整 / 大于作废 + 超出记收入）。
 
 ---
 
@@ -502,12 +581,13 @@ POST /api/transactions/tx_xxx/void
 
 ## 5. 变更与沟通约定
 
-1. 本文档对应 `contract v1.x`（当前 **v1.4**），**字段只增不删**；破坏性改动会提前在群里通知并升版本号。语义修正均不改变字段与端点形状，属澄清而非破坏性变更：
+1. 本文档对应 `contract v1.x`（当前 **v1.5**），**字段只增不删**；破坏性改动会提前在群里通知并升版本号。语义修正均不改变字段与端点形状，属澄清而非破坏性变更：
    - v1.2：`DUPLICATE_RECORD` 严重度由 `blocking` 改为 `warning`，与 §1.4「按成功处理」一致；
    - v1.2：`FUTURE_TIME` 增加 5 分钟时钟容差，把「未来」的判定边界写死；
    - v1.2：`occurredAt` 要求真实日历日期，拒绝 `2026-02-31` 这类 V8 会静默滚动的输入；
    - v1.3：退款/还款改为中性记录（`entry_type`），保留但不计入收支；移除 `REFUND_NOT_SUPPORTED`，新增 5 个反馈码；`summary` 恒只统计 normal，`meta.isEmpty` 依据区间是否有任何记录；
    - v1.4：退款/还款按金额三态——等额作废原单，少于原单调整原单金额，超出部分记收入（退款）/支出（还款）；新增 `ORIGINAL_AMOUNT_ADJUSTED`、`REFUND_EXCESS_AS_INCOME`、`REPAYMENT_EXCESS_AS_EXPENSE` 三个反馈码。
+   - v1.5：新增预设类别 13「贷款利息」（自定义从 14 起）、入站 `repaymentPart` / `principalCents` / `interestCents`、`settled_at` 结清标记；贷款还款改为保留原单并标记结清（2C），显式原单匹配取消 30 天上限（1D）；新增 `ORIGINAL_TRANSACTION_AGED`、`PARTIAL_REPAYMENT_RECORDED`、`AMBIGUOUS_LOAN_PAYMENT`、`ORIGINAL_ALREADY_SETTLED`；明确现金流口径；升级迁移会把任意 id 的同名自定义「贷款利息」重命名为「贷款利息(旧N)」，并同步迁移其账单、预算与学习规则引用。
 2. 模块 2 的实现在 `backend/` 下，接口以本文档为准；代码合并后如有差异，以代码为准并同步更新本文档。
 3. 模块 1 / 3 需要新增字段或接口（比如「按商户统计」），先在群里提，确认后由模块 2 加，**不要各自约定后直接改**。
 4. 联调问题优先带三样东西：`batchId` / `recordId` / 接口返回原文，方便直接查 `intake_log`。

@@ -64,7 +64,9 @@ export function readDraft(value: unknown): CaptureDraft {
   if (amount !== null && !Number.isSafeInteger(Math.round(amount * 100))) {
     throw new Error('金额超出可处理范围，请核对。');
   }
-  if (!['text', 'voice', 'image'].includes(String(data.modality))) throw new Error('输入形态无效。');
+  if (typeof data.modality !== 'string' || !['text', 'voice', 'image'].includes(data.modality)) {
+    throw new Error('输入形态无效。');
+  }
   const sourceRef = nullableText(data.sourceRef, '源文件引用');
   if (sourceRef !== null && /^\s*data:/i.test(sourceRef)) throw new Error('源文件引用不能内联文件内容。');
   return {
@@ -111,7 +113,9 @@ function readFeedback(value: unknown): CaptureFeedback {
 
 function readResult(value: unknown): CaptureResult {
   const data = object(value);
-  if (!STATUSES.includes(String(data.status)) || !Array.isArray(data.feedback)) throw new Error('M2 处理结果无效。');
+  if (typeof data.status !== 'string' || !STATUSES.includes(data.status) || !Array.isArray(data.feedback)) {
+    throw new Error('M2 处理结果无效。');
+  }
   const transactionId = nullableText(data.transactionId, '账单标识');
   if ((data.status === 'confirmed' || data.status === 'duplicate') && !transactionId) {
     throw new Error('M2 成功结果缺少账单标识。');

@@ -1,13 +1,13 @@
 import type {
-  BudgetItem,
   CategoryItem,
   TransactionItem,
   TransactionListResponse,
   TransactionQuery,
 } from '../types/contract';
-import { MOCK_BUDGETS_BY_MONTH, MOCK_CATEGORIES, MOCK_TRANSACTIONS } from './data';
+import { MOCK_CATEGORIES } from './data';
+import { storeTransactions } from './store';
 
-const storeTransactions: TransactionItem[] = [...MOCK_TRANSACTIONS];
+export { mockDeleteBudget, mockGetBudgets, mockPutBudget } from './budget';
 
 /**
  * 读取当前内存账单列表供统计模块聚合使用。
@@ -46,7 +46,7 @@ export function mockListTransactions(query: TransactionQuery): TransactionListRe
   let totalIncomeCents = 0;
 
   for (const tx of storeTransactions) {
-    if (query.categoryId !== null && query.categoryId !== undefined && tx.category.id !== query.categoryId) {
+    if (query.categoryId !== null && query.categoryId !== undefined && tx.category?.id !== query.categoryId) {
       continue;
     }
     if (query.direction && tx.direction !== query.direction) {
@@ -77,10 +77,11 @@ export function mockListTransactions(query: TransactionQuery): TransactionListRe
       from: query.from ?? null,
       to: query.to ?? null,
       direction: query.direction ?? null,
+      entryType: query.entryType ?? 'normal',
     },
     summary: {
-      totalExpenseCents,
-      totalIncomeCents,
+      expenseCents: totalExpenseCents,
+      incomeCents: totalIncomeCents,
       count: filtered.length,
     },
     items,
@@ -90,21 +91,8 @@ export function mockListTransactions(query: TransactionQuery): TransactionListRe
       nextCursor: hasMore ? String(nextIdx) : null,
     },
     meta: {
-      timezone: 'Asia/Shanghai',
+      unit: 'cent',
       isEmpty: filtered.length === 0,
     },
   };
-}
-
-/**
- * 查询指定月份预算列表。
- * @param month 月份（YYYY-MM）
- */
-export function mockGetBudgets(month: string): BudgetItem[] {
-  const list = MOCK_BUDGETS_BY_MONTH[month] ?? [];
-  const cloned: BudgetItem[] = [];
-  for (const b of list) {
-    cloned.push({ ...b, category: b.category ? { ...b.category } : null });
-  }
-  return cloned;
 }

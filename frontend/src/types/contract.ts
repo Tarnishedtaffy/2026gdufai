@@ -4,6 +4,7 @@ import type { CaptureFeedbackCode } from '@gduf/capture-flow';
 export { captureFeedbackText as feedbackText } from '@gduf/capture-flow';
 
 export type Direction = 'expense' | 'income';
+export type StatsDirection = 'all' | Direction;
 export type Modality = 'text' | 'voice' | 'image';
 export type ImportStatus = 'confirmed' | 'pending_followup' | 'duplicate' | 'rejected';
 export type FeedbackSeverity = 'blocking' | 'warning';
@@ -19,6 +20,7 @@ export type HttpErrorCode =
   | 'INVALID_QUERY_PARAM'
   | 'CATEGORY_NOT_FOUND'
   | 'CATEGORY_IN_USE'
+  | 'TRANSACTION_NOT_FOUND'
   | 'CATEGORY_NAME_TAKEN'
   | 'CATEGORY_PRESET_PROTECTED'
   | 'CATEGORY_KIND_MISMATCH'
@@ -144,7 +146,7 @@ export interface StatsMeta {
 export interface StatsResponse {
   dimension: StatsDimension;
   range: StatsRange;
-  direction: Direction;
+  direction: StatsDirection;
   summary: StatsSummary;
   buckets: StatsBucket[];
   meta: StatsMeta;
@@ -155,11 +157,12 @@ export interface TransactionFilter {
   from: string | null;
   to: string | null;
   direction: Direction | null;
+  entryType: 'normal' | 'refund' | 'repayment' | 'all';
 }
 
 export interface TransactionSummary {
-  totalExpenseCents: number;
-  totalIncomeCents: number;
+  expenseCents: number;
+  incomeCents: number;
   count: number;
 }
 
@@ -170,12 +173,14 @@ export interface TransactionItem {
   merchant: string | null;
   occurredAt: string;
   occurredDate: string;
-  category: CategoryRef;
+  category: CategoryRef | null;
   categoryConfidence: number | null;
   sourceModality: Modality;
   sourceRef: string | null;
   status: string;
-  anomalyFlag: string | null;
+  anomalyFlag: boolean | null;
+  entryType?: 'normal' | 'refund' | 'repayment';
+  settledAt?: string | null;
 }
 
 export interface TransactionPage {
@@ -185,7 +190,7 @@ export interface TransactionPage {
 }
 
 export interface TransactionMeta {
-  timezone: string;
+  unit: 'cent';
   isEmpty: boolean;
 }
 
@@ -197,14 +202,29 @@ export interface TransactionListResponse {
   meta: TransactionMeta;
 }
 
+export interface BudgetCategoryRef {
+  id: number;
+  name: string;
+}
+
 export interface BudgetItem {
+  id: number;
   scope: 'total' | 'category';
-  category: CategoryRef | null;
+  category: BudgetCategoryRef | null;
   amountCents: number;
   spentCents: number;
   remainingCents: number;
   usageRatio: number;
   level: BudgetLevel;
+  alertThresholds: number[];
+}
+
+export interface BudgetInput {
+  month: string;
+  scope: 'total' | 'category';
+  categoryId: number | null;
+  amountCents: number;
+  alertThresholds: number[];
 }
 
 export interface ErrorDetail {
@@ -219,7 +239,7 @@ export interface ApiErrorBody {
 
 export interface StatsQuery {
   dimension: StatsDimension;
-  direction?: Direction;
+  direction?: StatsDirection;
   date?: string;
   month?: string;
   year?: string;
@@ -232,4 +252,5 @@ export interface TransactionQuery {
   direction?: Direction | null;
   from?: string | null;
   to?: string | null;
+  entryType?: 'normal' | 'refund' | 'repayment' | 'all';
 }

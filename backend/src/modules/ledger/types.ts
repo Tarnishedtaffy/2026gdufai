@@ -7,6 +7,9 @@ export type Modality = 'text' | 'voice' | 'image';
 /** 分类结果来源，对应 transactions.category_source。 */
 export type ClassificationSource = 'rule' | 'user_rule' | 'llm' | 'fallback';
 
+/** 贷款还款的本金/利息属性，对应契约 §1.3 的 repaymentPart。 */
+export type RepaymentPart = 'principal' | 'interest' | 'mixed';
+
 /** 模块 1 批次中的单条记录（已通过校验的规范化形态）。 */
 export interface RawRecord {
   readonly recordId: string;
@@ -19,6 +22,12 @@ export interface RawRecord {
   readonly chatAt: string | null;
   /** 退款/还款场景下由模块 1 带回的原账单 id；正常记账为 null。 */
   readonly originalTransactionId: string | null;
+  /** 贷款还款的本金/利息属性；非还款记录为 null。 */
+  readonly repaymentPart: RepaymentPart | null;
+  /** 本次还款的本金（分）；未拆分为 null。 */
+  readonly principalCents: number | null;
+  /** 本次还款的利息（分）；未拆分为 null。 */
+  readonly interestCents: number | null;
   readonly rawText: string;
   readonly modality: Modality;
   readonly sourceRef: string | null;

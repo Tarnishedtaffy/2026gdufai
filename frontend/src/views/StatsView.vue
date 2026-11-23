@@ -8,6 +8,7 @@ import LoadingSkeleton from '../components/LoadingSkeleton.vue';
 
 const dimension = ref<StatsDimension>('recent7');
 const data = ref<StatsResponse | null>(null);
+const netCents = ref(0);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -24,7 +25,12 @@ async function loadStats(): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    data.value = await getStats({ dimension: dimension.value, direction: 'expense' });
+    const [expenseData, allData] = await Promise.all([
+      getStats({ dimension: dimension.value, direction: 'expense' }),
+      getStats({ dimension: dimension.value, direction: 'all' })
+    ]);
+    data.value = expenseData;
+    netCents.value = allData.summary.netCents;
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : '加载统计数据失败';
   } finally {
@@ -61,7 +67,7 @@ onMounted(() => {
     <div v-else class="card">
       <div class="summary-row">
         <span>总支出：<AmountText :cents="data.summary.expenseCents" direction="expense" /></span>
-        <span>净收支：<AmountText :cents="data.summary.netCents" /></span>
+        <span>净收支：<AmountText :cents="netCents" /></span>
         <span>笔数：{{ data.summary.count }} 笔</span>
         <span>最高类别：{{ data.summary.topCategory?.name ?? '—' }}</span>
       </div>

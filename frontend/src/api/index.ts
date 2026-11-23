@@ -1,4 +1,5 @@
 import type {
+  BudgetInput,
   BudgetItem,
   CategoryItem,
   ImportBatch,
@@ -9,7 +10,14 @@ import type {
   TransactionQuery,
 } from '../types/contract';
 import { createApiError, isMockEnabled, request } from './request';
-import { mockGetBudgets, mockGetCategories, mockListTransactions } from '../mock/db';
+import { nowIso } from '../utils/datetime';
+import {
+  mockDeleteBudget,
+  mockGetBudgets,
+  mockGetCategories,
+  mockListTransactions,
+  mockPutBudget,
+} from '../mock/db';
 import { mockGetStats } from '../mock/stats';
 import { mockImportBatch } from '../mock/import';
 
@@ -37,9 +45,14 @@ export async function getStats(query: StatsQuery): Promise<StatsResponse> {
     params.set('direction', query.direction);
   }
   if (query.dimension !== 'recent7') {
-    if (query.date) params.set('date', query.date);
-    if (query.month) params.set('month', query.month);
-    if (query.year) params.set('year', query.year);
+    const today = nowIso().slice(0, 10);
+    if (query.dimension === 'day') {
+      params.set('date', query.date ?? today);
+    } else if (query.dimension === 'month') {
+      params.set('month', query.month ?? today.slice(0, 7));
+    } else if (query.dimension === 'year') {
+      params.set('year', query.year ?? today.slice(0, 4));
+    }
   }
   return request<StatsResponse>(`/api/stats?${params.toString()}`);
 }
@@ -75,6 +88,32 @@ export async function getBudgets(month: string): Promise<BudgetItem[]> {
   }
   const params = new URLSearchParams({ month });
   return request<BudgetItem[]>(`/api/budgets?${params.toString()}`, { expectArray: true });
+}
+
+/**
+ * 新增或幂等覆盖预算。
+ * @param input 预算写入参数
+ */
+export async function putBudget(input: BudgetInput): Promise<BudgetItem> {
+  if (isMockEnabled()) {
+    return mockPutBudget(input);
+  }
+  return request<BudgetItem>('/api/budgets', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * 删除预算；成功时后端返回 204。
+ * @param id 预算 id
+ */
+export async function deleteBudget(id: number): Promise<void> {
+  if (isMockEnabled()) {
+    mockDeleteBudget(id);
+    return;
+  }
+  await request<void>(`/api/budgets/${id}`, { method: 'DELETE' });
 }
 
 /**

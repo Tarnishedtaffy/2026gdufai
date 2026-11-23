@@ -6,6 +6,19 @@ import { buildStats, type StatsDirection, type StatsDimension, type StatsOrder }
 import { listTransactions, type TransactionListQuery } from './transactions.ts';
 import { listCategoryItems } from './repository.ts';
 import { parseBatch } from './validation.ts';
+import {
+  patchTransaction,
+  voidTransactionById,
+  type PatchTransactionInput
+} from './transaction-edit.ts';
+import {
+  createCategory,
+  deleteCategory,
+  reassignCategory,
+  updateCategory,
+  type CreateCategoryInput,
+  type UpdateCategoryInput
+} from './categories.ts';
 
 function invalid(message: string): never {
   throw new AppError('INVALID_QUERY_PARAM', 422, message);
@@ -140,4 +153,54 @@ export async function registerLedgerRoutes(app: FastifyInstance): Promise<void> 
     }
     return reply.send(listTransactions(app.db, app.config.demoUserId, listQuery));
   });
+
+  app.patch('/api/transactions/:id', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const result = patchTransaction(
+      app.db,
+      id,
+      app.config.demoUserId,
+      (request.body ?? {}) as PatchTransactionInput
+    );
+    return reply.send(result);
+  });
+
+  app.post('/api/transactions/:id/void', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    return reply.send(voidTransactionById(app.db, id, app.config.demoUserId));
+  });
+
+  app.post('/api/categories', async (request, reply) => {
+    const item = createCategory(app.db, (request.body ?? {}) as CreateCategoryInput);
+    return reply.status(201).send(item);
+  });
+
+  app.patch('/api/categories/:id', async (request, reply) => {
+    const id = parseId((request.params as { id?: string }).id);
+    const item = updateCategory(app.db, id, (request.body ?? {}) as UpdateCategoryInput);
+    return reply.send(item);
+  });
+
+  app.delete('/api/categories/:id', async (request, reply) => {
+    const id = parseId((request.params as { id?: string }).id);
+    deleteCategory(app.db, id);
+    return reply.status(204).send();
+  });
+
+  app.post('/api/categories/:id/reassign', async (request, reply) => {
+    const id = parseId((request.params as { id?: string }).id);
+    const target = (request.body as { targetCategoryId?: unknown } | null)?.targetCategoryId;
+    if (!Number.isInteger(target) || (target as number) <= 0) {
+      invalid('targetCategoryId 必须是正整数');
+    }
+    return reply.send(reassignCategory(app.db, id, target as number));
+  });
+}
+
+function parseId(value: string | undefined): number {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    invalid('id 必须是正整数');
+  }
+  return id;
 }

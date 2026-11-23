@@ -169,14 +169,14 @@ describe('响应形状', () => {
   });
   it('账单 filter 与 item 字段', () => {
     const r = mockListTransactions({ categoryId: null, from: null, to: null, direction: null });
-    expect(Object.keys(r.filter).sort()).toEqual(['categoryId','direction','from','to'].sort());
+    expect(Object.keys(r.filter).sort()).toEqual(['categoryId','direction','entryType','from','to'].sort());
     expect(Object.keys(r.items[0])).toContain('occurredDate');
     expect(Object.keys(r.items[0])).toContain('sourceModality');
     expect(Object.keys(r.items[0])).toContain('anomalyFlag');
   });
   it('预算字段齐全', () => {
     const b = mockGetBudgets('2026-11')[0];
-    expect(Object.keys(b).sort()).toEqual(['amountCents','category','level','remainingCents','scope','spentCents','usageRatio'].sort());
+    expect(Object.keys(b).sort()).toEqual(['alertThresholds','amountCents','category','id','level','remainingCents','scope','spentCents','usageRatio'].sort());
   });
   it('错误码 5 个', async () => {
     const { HttpErrorCode } = await import('./src/types/contract').catch(() => ({ HttpErrorCode: null }));
