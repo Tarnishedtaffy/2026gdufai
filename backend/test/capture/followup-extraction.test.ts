@@ -33,7 +33,7 @@ describe('M1 第二阶段：追问修正与补丁抽取', () => {
       confidence: 0.85,
       rawText: '早上买了杯瑞幸',
       modality: 'image',
-      sourceRef: 'uploads/2026/11/receipt-01.jpg'
+      sourceRef: 'uploads/2026/11/550e8400-e29b-41d4-a716-446655440001.jpg'
     };
 
     const extractor = createCaptureExtractor({

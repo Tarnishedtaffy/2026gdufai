@@ -32,8 +32,11 @@ export const ACTIVE_CONTRACT_FEEDBACK_CODES: ReadonlySet<string> = new Set([
 const DIRECTIONS: readonly CaptureDirection[] = ['expense', 'income'];
 const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
 
+/** 文本与追问输入字符上限，防止超长提示词击穿上游上下文。 */
+export const MAX_CAPTURE_TEXT_LENGTH = 4000;
+
 const CONTROLLED_SOURCE_REF_PATTERN =
-  /^uploads\/\d{4}\/(?:0[1-9]|1[0-2])\/[A-Za-z0-9_-]+\.(?:jpg|png|webp|webm|wav|mp3|m4a|ogg)$/;
+  /^uploads\/\d{4}\/(?:0[1-9]|1[0-2])\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp|webm|wav|mp3|m4a|ogg)$/;
 const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/;

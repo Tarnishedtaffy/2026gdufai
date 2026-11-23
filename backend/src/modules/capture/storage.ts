@@ -147,7 +147,44 @@ function hasValidImageSignature(bytes: Uint8Array, canonicalMime: string): boole
     const format = Buffer.from(bytes.subarray(8, 12)).toString('ascii');
     return header === 'RIFF' && format === 'WEBP';
   }
-  return true;
+  return false;
+}
+
+function hasValidAudioSignature(bytes: Uint8Array, canonicalMime: string): boolean {
+  if (canonicalMime === 'audio/webm') {
+    return (
+      bytes.byteLength >= 4 &&
+      bytes[0] === 0x1a &&
+      bytes[1] === 0x45 &&
+      bytes[2] === 0xdf &&
+      bytes[3] === 0xa3
+    );
+  }
+  if (canonicalMime === 'audio/wav') {
+    if (bytes.byteLength < 12) {
+      return false;
+    }
+    const header = Buffer.from(bytes.subarray(0, 4)).toString('ascii');
+    const format = Buffer.from(bytes.subarray(8, 12)).toString('ascii');
+    return header === 'RIFF' && format === 'WAVE';
+  }
+  if (canonicalMime === 'audio/mpeg') {
+    if (bytes.byteLength >= 3 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+      return true;
+    }
+    if (bytes.byteLength >= 2 && bytes[0] === 0xff) {
+      const b1 = bytes[1] ?? 0;
+      return (b1 & 0xe0) === 0xe0 && (b1 & 0x18) !== 0x08 && (b1 & 0x06) !== 0x00;
+    }
+    return false;
+  }
+  if (canonicalMime === 'audio/mp4') {
+    return bytes.byteLength >= 8 && Buffer.from(bytes.subarray(4, 8)).toString('ascii') === 'ftyp';
+  }
+  if (canonicalMime === 'audio/ogg') {
+    return bytes.byteLength >= 4 && Buffer.from(bytes.subarray(0, 4)).toString('ascii') === 'OggS';
+  }
+  return false;
 }
 
 /** 受控上传存储入参。 */
@@ -200,6 +237,16 @@ export async function saveCaptureUpload(input: SaveCaptureUploadInput): Promise<
       failure: {
         code: 'UPLOAD_UNSUPPORTED_TYPE',
         message: '图片文件内容与声明的格式不匹配。',
+        field: 'file'
+      }
+    };
+  }
+  if (spec.modality === 'voice' && !hasValidAudioSignature(input.bytes, spec.canonicalMime)) {
+    return {
+      ok: false,
+      failure: {
+        code: 'UPLOAD_UNSUPPORTED_TYPE',
+        message: '音频文件内容与声明的格式不匹配。',
         field: 'file'
       }
     };

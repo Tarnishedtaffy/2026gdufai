@@ -2,6 +2,7 @@ import {
   ACTIVE_CONTRACT_FEEDBACK_CODES,
   isControlledSourceRef,
   isPlainObject,
+  MAX_CAPTURE_TEXT_LENGTH,
   normalizeAmount,
   normalizeConfidence,
   normalizeDirection,
@@ -16,6 +17,7 @@ import type { CaptureDraft, CaptureDraftPatch, CaptureModality } from './types.t
 export {
   ACTIVE_CONTRACT_FEEDBACK_CODES,
   isControlledSourceRef,
+  MAX_CAPTURE_TEXT_LENGTH,
   normalizeAmount,
   normalizeMerchant,
   normalizeOccurredAt,

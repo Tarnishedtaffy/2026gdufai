@@ -264,3 +264,26 @@
 - **验证**：`pnpm -r typecheck`、`pnpm -r lint`、`pnpm --filter @gduf/backend exec vitest run`、`pnpm --filter frontend exec vitest run`、`VITE_USE_MOCK=false pnpm --filter frontend build`、`git diff --check` 与 LF/EOF 检查全部通过。
 - **人工审核**：Draft PR #35 已更新并回复 `@Tarnishedtaffy`；等待 `#24` 全部确认框勾选冻结后转为 Ready for Review。
 - **遗留问题**：`#23`（v1.5）合并至 `main` 后需在 M1 `ACTIVE_CONTRACT_FEEDBACK_CODES` 补回其 4 个贷款反馈码；`docs/contracts/module2-interface-v1.md` v1.6 与前端附件闭环待 `#24` 冻结后按计划推进。
+
+### LOG-mianyoubiaoqing-20261123-01
+
+- **时间**：2026-11-23 21:26（+08:00）
+- **工具/模型**：Antigravity / Gemini
+- **模块 / 分支 / PR**：M1 / `feat/m1-capture-routes` / [#35](https://github.com/Tarnishedtaffy/2026gdufai/pull/35)（Draft，关联 [#40](https://github.com/Tarnishedtaffy/2026gdufai/issues/40)、[#41](https://github.com/Tarnishedtaffy/2026gdufai/issues/41)）
+- **任务**：同步远端最新进展，快进合入维护者对齐 v1.5 白名单提交 `7fabf96`（#41），修复 PR #35 P1 音频魔数校验（#40）与全部 3 项 P3，并完成 `#24` 流程端勾选、PR `#53` 共享文件复核与各议题回应。
+- **关键提示词**：
+  - 读一下远端最新变动，并把需要我们复核或回应的项都做一下
+- **代理做了什么**：
+  - **快进同步 `7fabf96`**：从 fork 拉取并快进合入 `@Tarnishedtaffy` 提交的 `7fabf96`（`ACTIVE_CONTRACT_FEEDBACK_CODES` 对齐已合并的 v1.5 22 码，保留 `REPAYMENT_EXCESS_AS_EXPENSE` 历史兼容，关闭 #41）。
+  - **P1 音频魔数双校验（`backend/src/modules/capture/storage.ts`，#40）**：新增 `hasValidAudioSignature`，对 `audio/webm`（`1A 45 DF A3`）、`audio/wav`（`RIFF....WAVE`）、`audio/mpeg`（`ID3` 或合法 MPEG 帧头 `FF E0` 掩码且排除保留版本/层 `00`）、`audio/mp4`/`m4a`（偏移 4 为 `ftyp`）、`audio/ogg`（`OggS`）执行魔数校验；不匹配统一返回 `UPLOAD_UNSUPPORTED_TYPE`（路由映射 `415 INVALID_UPLOAD`）。
+  - **全部 P3 收口**：
+    - `normalizers.ts` 将 `CONTROLLED_SOURCE_REF_PATTERN` 收紧为小写 UUID 文件名；
+    - 导出 `MAX_CAPTURE_TEXT_LENGTH = 4000`，并在 `extractor.ts` 与 `routes.ts` 的 `rawText` / `followupText` 调用 AI 前强制拦截超长文本，返回 `422 INVALID_CAPTURE_INPUT`；
+    - 更新 `followup-extraction.test.ts` 与 `multimodal-pipeline.test.ts` 夹具为合法 UUID 以确保符号链接/硬链接/大小边界用例直达存储层，并在 `multimodal-pipeline.test.ts`、`routes.test.ts` 补齐 5 种音频正/反魔数校验、非 UUID / 跨目录穿越 `sourceRef` 422、以及 4001 字符超限 422 测试。
+  - **GitHub 复核与回应**：依 `@yukacezar569-blip` 在 `#24` 的确认留言勾选「M1 流程端负责人已确认最终正文」，并在 `#24` §2.10.2 补记 4000 字符上限，@ `@Tarnishedtaffy` 完成前端知悉确认；复核并确认 PR `#53` 对 `packages/capture-flow/src/feedback.ts` 与契约说明的修改与 M1 识别端兼容；更新 PR `#35` 说明关联 `Closes #40`、`Closes #41` 并回复评审人。
+- **决策**：
+  - 继续保留 `docs/contracts/module2-interface-v1.md` 不在本 PR 修改，待 `#24` 前端确认框勾选冻结后由契约维护方或按约定同步写入 §2.10 与 4 个错误码，再将 PR #35 转为 Ready。
+  - MPEG 帧同步校验在 `0xFF + (b1 & 0xE0) === 0xE0` 基础上同时排除无效 MPEG 版本（`0x08`）与保留层（`0x00`），避免随机噪声 `FF FF` 被误判为 MP3。
+- **验证**：`pnpm -r typecheck`、`pnpm -r lint`、`pnpm --filter @gduf/backend exec vitest run`、`pnpm --filter frontend exec vitest run`、`VITE_USE_MOCK=false pnpm --filter frontend build`、`git diff --check` 与 LF/EOF 检查全部通过。
+- **人工审核**：PR #35 修复已推送并回复 `@Tarnishedtaffy` 与 `@ONFAIL`；PR #53 已复核确认；等待 `@Tarnishedtaffy` 在 `#24` 勾选前端确认及契约正文落地后转 Ready。
+- **遗留问题**：契约文档 §2.10 与 §2.6 4 个错误码待 `#24` 冻结后写入 `docs/contracts/module2-interface-v1.md`；`#6` 前端附件联调与端到端验收待后端路由合入后继续推进。

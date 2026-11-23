@@ -204,11 +204,47 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
     });
     expect(resJpg.statusCode).toBe(201);
     expect(resJpg.json()).toMatchObject({
-      sourceRef: expect.stringMatching(/^uploads\/\d{4}\/\d{2}\/[A-Za-z0-9-]+\.jpg$/),
+      sourceRef: expect.stringMatching(
+        /^uploads\/\d{4}\/(?:0[1-9]|1[0-2])\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/
+      ),
       modality: 'image',
       mimeType: 'image/jpeg',
       byteLength: JPEG_BYTES.byteLength
     });
+
+    // WebM / MP3 / M4A / OGG 合法魔数音频上传（201）
+    for (const validAudio of [
+      {
+        ext: 'webm',
+        contentType: 'audio/webm',
+        bytes: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42])
+      },
+      { ext: 'mp3', contentType: 'audio/mpeg', bytes: Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00]) },
+      { ext: 'mp3', contentType: 'audio/mpeg', bytes: Buffer.from([0xff, 0xfb, 0x90, 0x64]) },
+      {
+        ext: 'm4a',
+        contentType: 'audio/mp4',
+        bytes: Buffer.from('\x00\x00\x00\x18ftypM4A \x00\x00\x00\x00')
+      },
+      { ext: 'ogg', contentType: 'audio/ogg', bytes: Buffer.from('OggS\x00\x02\x00\x00') }
+    ]) {
+      const form = buildMultipartBody(`b-audio-${validAudio.ext}`, [
+        {
+          name: 'file',
+          filename: `sample.${validAudio.ext}`,
+          contentType: validAudio.contentType,
+          bytes: validAudio.bytes
+        }
+      ]);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/capture/uploads',
+        headers: { 'content-type': form.contentType },
+        payload: form.payload
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.json()).toMatchObject({ modality: 'voice', mimeType: validAudio.contentType });
+    }
 
     // 超过 Fastify 默认 1 MiB 但 ≤ 15 MiB 的合法 WAV 上传（201）
     const wav1500Kb = Buffer.alloc(1500 * 1024);
@@ -281,7 +317,7 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
     expect(resJsonType.statusCode).toBe(400);
     expect(resJsonType.json()).toMatchObject({ error: { code: 'INVALID_UPLOAD' } });
 
-    // 假 PNG 魔数 / 不支持 MIME / 原型链 MIME → 415 INVALID_UPLOAD
+    // 假 PNG / 假音频魔数 / 不支持 MIME / 原型链 MIME → 415 INVALID_UPLOAD
     const spoofedPng = buildMultipartBody('b-spoof', [
       { name: 'file', filename: 'fake.png', contentType: 'image/png', bytes: 'not-a-png' }
     ]);
@@ -293,6 +329,31 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
     });
     expect(resSpoof.statusCode).toBe(415);
     expect(resSpoof.json()).toMatchObject({ error: { code: 'INVALID_UPLOAD' } });
+
+    for (const spoofedAudio of [
+      { filename: 'fake.wav', contentType: 'audio/wav' },
+      { filename: 'fake.webm', contentType: 'audio/webm' },
+      { filename: 'fake.mp3', contentType: 'audio/mpeg' },
+      { filename: 'fake.m4a', contentType: 'audio/mp4' },
+      { filename: 'fake.ogg', contentType: 'audio/ogg' }
+    ]) {
+      const form = buildMultipartBody(`b-spoof-${spoofedAudio.filename}`, [
+        {
+          name: 'file',
+          filename: spoofedAudio.filename,
+          contentType: spoofedAudio.contentType,
+          bytes: 'plain-text-not-audio'
+        }
+      ]);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/capture/uploads',
+        headers: { 'content-type': form.contentType },
+        payload: form.payload
+      });
+      expect(res.statusCode).toBe(415);
+      expect(res.json()).toMatchObject({ error: { code: 'INVALID_UPLOAD', field: 'file' } });
+    }
 
     const protoMime = buildMultipartBody('b-proto', [
       { name: 'file', filename: 'a.bin', contentType: 'constructor', bytes: PNG_BYTES }
@@ -394,6 +455,69 @@ describe('M1 第二阶段：/api/capture/uploads 与 /api/capture/extract HTTP �
           sentAt: SENT_AT
         },
         field: 'sourceRef'
+      },
+      {
+        payload: {
+          mode: 'draft',
+          modality: 'image',
+          sourceRef: 'uploads/2026/11/../../etc/passwd.jpg',
+          sentAt: SENT_AT
+        },
+        field: 'sourceRef'
+      },
+      {
+        payload: {
+          mode: 'draft',
+          modality: 'image',
+          sourceRef: 'uploads/2026/../2025/11/550e8400-e29b-41d4-a716-446655440000.jpg',
+          sentAt: SENT_AT
+        },
+        field: 'sourceRef'
+      },
+      {
+        payload: {
+          mode: 'draft',
+          modality: 'image',
+          sourceRef: 'uploads/2026/11/not-a-uuid.jpg',
+          sentAt: SENT_AT
+        },
+        field: 'sourceRef'
+      },
+      {
+        payload: {
+          mode: 'draft',
+          modality: 'image',
+          sourceRef: 'data:image/png;base64,iVBORw0KGgo=',
+          sentAt: SENT_AT
+        },
+        field: 'sourceRef'
+      },
+      {
+        payload: {
+          mode: 'draft',
+          modality: 'text',
+          rawText: 'a'.repeat(4001),
+          sentAt: SENT_AT
+        },
+        field: 'rawText'
+      },
+      {
+        payload: {
+          mode: 'followup',
+          currentDraft: {
+            amount: null,
+            merchant: '瑞幸',
+            occurredAt: SENT_AT,
+            direction: 'expense',
+            confidence: 0.9,
+            rawText: '早上买咖啡',
+            modality: 'text',
+            sourceRef: null
+          },
+          followupText: 'b'.repeat(4001),
+          sentAt: SENT_AT
+        },
+        field: 'followupText'
       },
       {
         payload: {

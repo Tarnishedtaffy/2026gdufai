@@ -27,6 +27,7 @@ export {
 export {
   ACTIVE_CONTRACT_FEEDBACK_CODES,
   isControlledSourceRef,
+  MAX_CAPTURE_TEXT_LENGTH,
   mergeDraftPatch,
   normalizeAmount,
   normalizeMerchant,

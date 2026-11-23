@@ -3,6 +3,7 @@ import { AppError } from '../../shared/errors.ts';
 import type { CaptureExtractor } from './extractor.ts';
 import {
   isPlainObject,
+  MAX_CAPTURE_TEXT_LENGTH,
   normalizeReferenceTime,
   validatePendingFeedbackHints
 } from './normalizers.ts';
@@ -281,6 +282,12 @@ export async function registerCaptureRoutes(
         if (typeof body.rawText !== 'string' || body.rawText.trim() === '') {
           throw invalidCaptureInput('rawText 必须是非空字符串。', 'rawText');
         }
+        if (body.rawText.trim().length > MAX_CAPTURE_TEXT_LENGTH) {
+          throw invalidCaptureInput(
+            `rawText 长度不能超过 ${MAX_CAPTURE_TEXT_LENGTH} 字符。`,
+            'rawText'
+          );
+        }
         const outcome = await options.extractor.extractFromText({
           rawText: body.rawText,
           referenceTime: validSentAt
@@ -360,6 +367,12 @@ export async function registerCaptureRoutes(
 
     if (typeof body.followupText !== 'string' || body.followupText.trim() === '') {
       throw invalidCaptureInput('followupText 必须是非空字符串。', 'followupText');
+    }
+    if (body.followupText.trim().length > MAX_CAPTURE_TEXT_LENGTH) {
+      throw invalidCaptureInput(
+        `followupText 长度不能超过 ${MAX_CAPTURE_TEXT_LENGTH} 字符。`,
+        'followupText'
+      );
     }
 
     const feedbackFailure = validatePendingFeedbackHints(
