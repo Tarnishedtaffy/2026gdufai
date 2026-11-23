@@ -1,13 +1,21 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { AppConfig } from './config/index.ts';
+import { loadAiConfig, type AppConfig } from './config/index.ts';
 import type { Db } from './db/client.ts';
 import { registerBudgetRoutes } from './modules/budget/routes.ts';
+import {
+  createCaptureExtractor,
+  createOpenAiCompatibleProvider,
+  registerCaptureRoutes,
+  type CaptureExtractor
+} from './modules/capture/index.ts';
 import { registerLedgerRoutes } from './modules/ledger/routes.ts';
 import { AppError } from './shared/errors.ts';
 
 export interface AppDeps {
   readonly config: AppConfig;
   readonly db: Db;
+  /** 可选注入的 M1 抽取服务；测试可通过 `app.inject` 传入 stub。 */
+  readonly captureExtractor?: CaptureExtractor;
 }
 
 declare module 'fastify' {
@@ -19,7 +27,7 @@ declare module 'fastify' {
 
 /**
  * 创建 Fastify 实例。测试用 `app.inject` 直接调用，不监听端口。
- * 业务路由在后续 PR 中按契约分批注册。
+ * M1 上传/抽取与 M2 业务路由按契约注册。
  */
 export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({
@@ -28,6 +36,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
 
   app.decorate('db', deps.db);
   app.decorate('config', deps.config);
+
+  const captureExtractor =
+    deps.captureExtractor ??
+    createCaptureExtractor({
+      uploadDir: deps.config.uploadDir,
+      provider: createOpenAiCompatibleProvider(deps.config.ai ?? loadAiConfig({}))
+    });
 
   // 鉴权：APP_AUTH_TOKEN 已配置时，所有 /api/* 请求必须携带 Bearer Token。
   app.addHook('onRequest', async (request) => {
@@ -41,6 +56,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
 
   void app.register(registerLedgerRoutes);
   void app.register(registerBudgetRoutes);
+  void app.register(registerCaptureRoutes, { extractor: captureExtractor });
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {

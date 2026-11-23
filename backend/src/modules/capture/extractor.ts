@@ -1,4 +1,4 @@
-import { validatePendingFeedbackHints } from './normalizers.ts';
+import { MAX_CAPTURE_TEXT_LENGTH, validatePendingFeedbackHints } from './normalizers.ts';
 import { buildFollowupExtractionPrompts, PROMPT_VERSION_FOLLOWUP } from './prompts/extract-followup.ts';
 import { buildReceiptExtractionPrompts, PROMPT_VERSION_RECEIPT } from './prompts/extract-receipt.ts';
 import { buildTextExtractionPrompts, PROMPT_VERSION_TEXT } from './prompts/extract-text.ts';
@@ -162,6 +162,16 @@ export function createCaptureExtractor(deps: CaptureExtractorDeps): CaptureExtra
           failure: { code: 'EMPTY_INPUT', message: '请输入需要记账的文字内容。', field: 'rawText' }
         };
       }
+      if (trimmed.length > MAX_CAPTURE_TEXT_LENGTH) {
+        return {
+          ok: false,
+          failure: {
+            code: 'INVALID_CAPTURE_INPUT',
+            message: `输入文本长度不能超过 ${MAX_CAPTURE_TEXT_LENGTH} 字符。`,
+            field: 'rawText'
+          }
+        };
+      }
       return extractDraftsFromRawText(trimmed, input.referenceTime, 'text', null);
     },
 
@@ -171,6 +181,16 @@ export function createCaptureExtractor(deps: CaptureExtractorDeps): CaptureExtra
         return {
           ok: false,
           failure: { code: 'EMPTY_INPUT', message: '请输入追问补充内容。', field: 'followupText' }
+        };
+      }
+      if (trimmedFollowup.length > MAX_CAPTURE_TEXT_LENGTH) {
+        return {
+          ok: false,
+          failure: {
+            code: 'INVALID_CAPTURE_INPUT',
+            message: `追问补充长度不能超过 ${MAX_CAPTURE_TEXT_LENGTH} 字符。`,
+            field: 'followupText'
+          }
         };
       }
 

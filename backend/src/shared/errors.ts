@@ -12,7 +12,11 @@ export type ErrorCode =
   | 'BUDGET_NOT_FOUND'
   | 'BUDGET_CONFLICT'
   | 'UNAUTHORIZED'
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  | 'INVALID_UPLOAD'
+  | 'INVALID_CAPTURE_INPUT'
+  | 'CAPTURE_EMPTY_RECOGNITION'
+  | 'AI_UPSTREAM_ERROR';
 
 export interface AppErrorOptions {
   field?: string;

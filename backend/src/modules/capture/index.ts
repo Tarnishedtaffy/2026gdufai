@@ -27,6 +27,7 @@ export {
 export {
   ACTIVE_CONTRACT_FEEDBACK_CODES,
   isControlledSourceRef,
+  MAX_CAPTURE_TEXT_LENGTH,
   mergeDraftPatch,
   normalizeAmount,
   normalizeMerchant,
@@ -40,11 +41,14 @@ export {
   validatePendingFeedbackHints,
   type ParsedReceiptResult
 } from './schema.ts';
+export { registerCaptureRoutes, type CaptureRoutesOptions } from './routes.ts';
 export {
   readCaptureUpload,
   saveCaptureUpload,
+  verifyCaptureUploadRef,
   type ReadCaptureUploadOutcome,
-  type SaveCaptureUploadInput
+  type SaveCaptureUploadInput,
+  type VerifyCaptureUploadOutcome
 } from './storage.ts';
 export {
   CaptureProviderError,

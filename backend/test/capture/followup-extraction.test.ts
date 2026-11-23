@@ -33,7 +33,7 @@ describe('M1 第二阶段：追问修正与补丁抽取', () => {
       confidence: 0.85,
       rawText: '早上买了杯瑞幸',
       modality: 'image',
-      sourceRef: 'uploads/2026/11/receipt-01.jpg'
+      sourceRef: 'uploads/2026/11/550e8400-e29b-41d4-a716-446655440001.jpg'
     };
 
     const extractor = createCaptureExtractor({
@@ -207,8 +207,11 @@ describe('M1 第二阶段：追问修正与补丁抽取', () => {
     expect(aiCalls).toBe(0);
   });
 
-  it('放行已冻结 #23（v1.5 §6）四个反馈码，且忽略模型擅自回传的 patch.rawText 覆盖', async () => {
-    const v15Codes = [
+  it('放行契约 v1.5 现行反馈码，且忽略模型擅自回传的 patch.rawText 覆盖', async () => {
+    const activeV15Codes = [
+      'ORIGINAL_AMOUNT_ADJUSTED',
+      'REFUND_EXCESS_AS_INCOME',
+      'REPAYMENT_EXCESS_AS_EXPENSE',
       'ORIGINAL_TRANSACTION_AGED',
       'PARTIAL_REPAYMENT_RECORDED',
       'AMBIGUOUS_LOAN_PAYMENT',
@@ -234,7 +237,7 @@ describe('M1 第二阶段：追问修正与补丁抽取', () => {
       )
     });
 
-    for (const code of v15Codes) {
+    for (const code of activeV15Codes) {
       const outcome = await extractor.extractFollowupPatch({
         currentDraft,
         followupText: '本金450元',

@@ -10,6 +10,7 @@ import {
   PROMPT_VERSION_TEXT,
   readCaptureUpload,
   saveCaptureUpload,
+  verifyCaptureUploadRef,
   type CaptureAiProvider
 } from '../../src/modules/capture/index.ts';
 
@@ -104,11 +105,14 @@ describe('M1 第三阶段：受控上传存储与语音/小票流水线', () => 
     });
     expect(savedWebp.ok).toBe(true);
 
+    expect(isControlledSourceRef('uploads/2026/11/not-a-uuid.jpg')).toBe(false);
+
     for (const badRef of [
       'receipt.jpg',
       'data:image/png;base64,iVBORw0KGgo=',
+      'uploads/2026/11/not-a-uuid.jpg',
       'uploads/2026/11/../../etc/passwd.jpg',
-      '/uploads/2026/11/a.jpg'
+      '/uploads/2026/11/550e8400-e29b-41d4-a716-446655440000.jpg'
     ]) {
       const readInvalid = await readCaptureUpload(uploadDir, badRef);
       expect(readInvalid).toEqual({
@@ -367,14 +371,15 @@ describe('M1 第三阶段：受控上传存储与语音/小票流水线', () => 
     const fixedTime = new Date('2026-11-19T10:00:00+08:00');
 
     // 年份层级（uploadDir/2026 -> outsideDir）符号链接逃逸拦截
+    const yearEscapeName = '550e8400-e29b-41d4-a716-446655440011.jpg';
     const uploadDir = await makeUploadDir();
     const outsideDir = await makeUploadDir();
     const outsideMonthDir = join(outsideDir, '11');
     await mkdir(outsideMonthDir, { recursive: true });
-    await writeFile(join(outsideMonthDir, 'secret.jpg'), JPEG_BYTES);
+    await writeFile(join(outsideMonthDir, yearEscapeName), JPEG_BYTES);
     await symlink(outsideDir, join(uploadDir, '2026'), dirType);
 
-    const readYearEscape = await readCaptureUpload(uploadDir, 'uploads/2026/11/secret.jpg');
+    const readYearEscape = await readCaptureUpload(uploadDir, `uploads/2026/11/${yearEscapeName}`);
     expect(readYearEscape).toEqual({
       ok: false,
       failure: expect.objectContaining({ code: 'INVALID_SOURCE_REF' })
@@ -390,16 +395,17 @@ describe('M1 第三阶段：受控上传存储与语音/小票流水线', () => 
       ok: false,
       failure: expect.objectContaining({ code: 'INVALID_SOURCE_REF' })
     });
-    expect(await readdir(outsideMonthDir)).toEqual(['secret.jpg']);
+    expect(await readdir(outsideMonthDir)).toEqual([yearEscapeName]);
 
     // 月份层级（uploadDir2/2026/11 -> outsideTargetDir）符号链接逃逸拦截
+    const monthEscapeName = '550e8400-e29b-41d4-a716-446655440012.jpg';
     const uploadDir2 = await makeUploadDir();
     const outsideTargetDir = await makeUploadDir();
-    await writeFile(join(outsideTargetDir, 'secret.jpg'), JPEG_BYTES);
+    await writeFile(join(outsideTargetDir, monthEscapeName), JPEG_BYTES);
     await mkdir(join(uploadDir2, '2026'), { recursive: true });
     await symlink(outsideTargetDir, join(uploadDir2, '2026', '11'), dirType);
 
-    const readMonthEscape = await readCaptureUpload(uploadDir2, 'uploads/2026/11/secret.jpg');
+    const readMonthEscape = await readCaptureUpload(uploadDir2, `uploads/2026/11/${monthEscapeName}`);
     expect(readMonthEscape).toEqual({
       ok: false,
       failure: expect.objectContaining({ code: 'INVALID_SOURCE_REF' })
@@ -415,7 +421,7 @@ describe('M1 第三阶段：受控上传存储与语音/小票流水线', () => 
       ok: false,
       failure: expect.objectContaining({ code: 'INVALID_SOURCE_REF' })
     });
-    expect(await readdir(outsideTargetDir)).toEqual(['secret.jpg']);
+    expect(await readdir(outsideTargetDir)).toEqual([monthEscapeName]);
   });
 
   it('readCaptureUpload 拒绝多硬链接与超大小上限文件，并支持自动创建不存在的 uploadDir（P3 回归）', async () => {
@@ -424,19 +430,21 @@ describe('M1 第三阶段：受控上传存储与语音/小票流水线', () => 
     const monthDir = join(uploadDir, '2026', '11');
     await mkdir(monthDir, { recursive: true });
 
+    const hardlinkName = '550e8400-e29b-41d4-a716-446655440013.jpg';
     const outsideFile = join(outsideDir, 'outside.jpg');
     await writeFile(outsideFile, JPEG_BYTES);
-    await link(outsideFile, join(monthDir, 'hardlinked.jpg'));
+    await link(outsideFile, join(monthDir, hardlinkName));
 
-    const hardlinkRead = await readCaptureUpload(uploadDir, 'uploads/2026/11/hardlinked.jpg');
+    const hardlinkRead = await readCaptureUpload(uploadDir, `uploads/2026/11/${hardlinkName}`);
     expect(hardlinkRead).toEqual({
       ok: false,
       failure: expect.objectContaining({ code: 'INVALID_SOURCE_REF' })
     });
 
-    const oversizedPath = join(monthDir, 'oversized.png');
+    const oversizedName = '550e8400-e29b-41d4-a716-446655440014.png';
+    const oversizedPath = join(monthDir, oversizedName);
     await writeFile(oversizedPath, Buffer.concat([PNG_BYTES, Buffer.alloc(10 * 1024 * 1024)]));
-    const oversizedRead = await readCaptureUpload(uploadDir, 'uploads/2026/11/oversized.png');
+    const oversizedRead = await readCaptureUpload(uploadDir, `uploads/2026/11/${oversizedName}`);
     expect(oversizedRead).toEqual({
       ok: false,
       failure: expect.objectContaining({ code: 'UPLOAD_TOO_LARGE' })
@@ -455,5 +463,114 @@ describe('M1 第三阶段：受控上传存储与语音/小票流水线', () => 
       const readBack = await readCaptureUpload(freshUploadDir, saved.upload.sourceRef);
       expect(readBack.ok).toBe(true);
     }
+
+    // 跨多个 64 KiB 分块读取 + verifyCaptureUploadRef 不读体校验与模态防串台
+    const multiChunkPng = Buffer.concat([PNG_BYTES, Buffer.alloc(180 * 1024, 0x2a)]);
+    const savedMulti = await saveCaptureUpload({
+      uploadDir,
+      bytes: multiChunkPng,
+      mimeType: 'image/png',
+      now: new Date(REFERENCE_TIME)
+    });
+    expect(savedMulti.ok).toBe(true);
+    if (savedMulti.ok) {
+      const verifiedOk = await verifyCaptureUploadRef(uploadDir, savedMulti.upload.sourceRef, 'image');
+      expect(verifiedOk).toEqual({ ok: true });
+      const verifiedWrongModality = await verifyCaptureUploadRef(
+        uploadDir,
+        savedMulti.upload.sourceRef,
+        'voice'
+      );
+      expect(verifiedWrongModality).toEqual({
+        ok: false,
+        failure: expect.objectContaining({ code: 'INVALID_SOURCE_REF' })
+      });
+      const readMulti = await readCaptureUpload(uploadDir, savedMulti.upload.sourceRef);
+      expect(readMulti.ok).toBe(true);
+      if (readMulti.ok) {
+        expect(Buffer.from(readMulti.bytes)).toEqual(multiChunkPng);
+      }
+    }
+  });
+
+  it('saveCaptureUpload 对 WebM/WAV/MP3/MP4/OGG 执行魔数双校验，extractor 拒绝超 4000 字符输入（#40 / P3）', async () => {
+    const uploadDir = await makeUploadDir();
+    const validAudioSamples: readonly { mimeType: string; bytes: Uint8Array }[] = [
+      { mimeType: 'audio/webm', bytes: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42]) },
+      { mimeType: 'audio/wav', bytes: WAV_BYTES },
+      { mimeType: 'audio/mpeg', bytes: Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00]) },
+      { mimeType: 'audio/mpeg', bytes: Buffer.from([0xff, 0xfb, 0x90, 0x64]) },
+      { mimeType: 'audio/mp4', bytes: Buffer.from('\x00\x00\x00\x18ftypM4A \x00\x00\x00\x00') },
+      { mimeType: 'audio/ogg', bytes: Buffer.from('OggS\x00\x02\x00\x00') }
+    ];
+
+    for (const sample of validAudioSamples) {
+      const outcome = await saveCaptureUpload({
+        uploadDir,
+        bytes: sample.bytes,
+        mimeType: sample.mimeType
+      });
+      expect(outcome.ok).toBe(true);
+    }
+
+    for (const spoofedMime of ['audio/wav', 'audio/webm', 'audio/mpeg', 'audio/mp4', 'audio/ogg']) {
+      const outcome = await saveCaptureUpload({
+        uploadDir,
+        bytes: Buffer.from('plain-text-not-audio'),
+        mimeType: spoofedMime
+      });
+      expect(outcome).toEqual({
+        ok: false,
+        failure: expect.objectContaining({ code: 'UPLOAD_UNSUPPORTED_TYPE', field: 'file' })
+      });
+    }
+
+    let aiCalls = 0;
+    const extractor = createCaptureExtractor({
+      uploadDir,
+      provider: {
+        completeJson: async () => {
+          aiCalls++;
+          return '{}';
+        },
+        completeVisionJson: async () => {
+          aiCalls++;
+          return '{}';
+        },
+        transcribeAudio: async () => {
+          aiCalls++;
+          return '';
+        }
+      }
+    });
+
+    const tooLongText = await extractor.extractFromText({
+      rawText: '测'.repeat(4001),
+      referenceTime: REFERENCE_TIME
+    });
+    expect(tooLongText).toEqual({
+      ok: false,
+      failure: expect.objectContaining({ code: 'INVALID_CAPTURE_INPUT', field: 'rawText' })
+    });
+
+    const tooLongFollowup = await extractor.extractFollowupPatch({
+      currentDraft: {
+        amount: null,
+        merchant: '咖啡店',
+        occurredAt: REFERENCE_TIME,
+        direction: 'expense',
+        confidence: 0.9,
+        rawText: '喝咖啡',
+        modality: 'text',
+        sourceRef: null
+      },
+      followupText: '补'.repeat(4001),
+      referenceTime: REFERENCE_TIME
+    });
+    expect(tooLongFollowup).toEqual({
+      ok: false,
+      failure: expect.objectContaining({ code: 'INVALID_CAPTURE_INPUT', field: 'followupText' })
+    });
+    expect(aiCalls).toBe(0);
   });
 });

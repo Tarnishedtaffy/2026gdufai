@@ -1,6 +1,9 @@
 import type { CaptureDirection, CaptureFailure, PendingFeedbackHint } from './types.ts';
 
-/** 契约 v1.4 §1.5 + 已冻结 #23（v1.5 §6）现行登记的反馈码白名单（不含已废弃历史码）。 */
+/**
+ * 严格对齐契约 v1.5 §1.5 的 22 个反馈码白名单。
+ * `REPAYMENT_EXCESS_AS_EXPENSE` 已 deprecated，保留用于兼容历史回执。
+ */
 export const ACTIVE_CONTRACT_FEEDBACK_CODES: ReadonlySet<string> = new Set([
   'MISSING_AMOUNT',
   'MISSING_TIME',
@@ -29,8 +32,11 @@ export const ACTIVE_CONTRACT_FEEDBACK_CODES: ReadonlySet<string> = new Set([
 const DIRECTIONS: readonly CaptureDirection[] = ['expense', 'income'];
 const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
 
+/** 文本与追问输入字符上限，防止超长提示词击穿上游上下文。 */
+export const MAX_CAPTURE_TEXT_LENGTH = 4000;
+
 const CONTROLLED_SOURCE_REF_PATTERN =
-  /^uploads\/\d{4}\/(?:0[1-9]|1[0-2])\/[A-Za-z0-9_-]+\.(?:jpg|png|webp|webm|wav|mp3|m4a|ogg)$/;
+  /^uploads\/\d{4}\/(?:0[1-9]|1[0-2])\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp|webm|wav|mp3|m4a|ogg)$/;
 const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/;
@@ -248,6 +254,13 @@ export function validatePendingFeedbackHints(
         code: 'INVALID_CAPTURE_INPUT',
         field: `pendingFeedback[${i}].code`,
         message: `存在未登记或已废弃的反馈码: ${String(hint?.code ?? '')}`
+      };
+    }
+    if (hint.field !== undefined && hint.field !== null && typeof hint.field !== 'string') {
+      return {
+        code: 'INVALID_CAPTURE_INPUT',
+        field: `pendingFeedback[${i}].field`,
+        message: 'pendingFeedback field 必须是字符串或 null。'
       };
     }
     if (
