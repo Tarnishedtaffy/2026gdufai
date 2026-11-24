@@ -1,8 +1,8 @@
 # 模块 2 接口交接文档
 
 > 适用对象：模块 1（语音/文字/图片记账）、模块 3（自然语言查账）、模块 4（预算提醒，同进程）
-> 文档版本：v1.5（贷款利息类别 13、`settled_at` 结清标记、`repaymentPart` 入站字段、贷款还款口径 1D/2C）
-> 冻结依据：contract-change issue #23（v1.5）；#21 为 v1.4 退款三态基线
+> 文档版本：v1.6（账单一览响应新增 `matchedTransactionId`、`settled_at` 结清标记、`repaymentPart` 入站字段、贷款利息类别 13、贷款还款口径 1D/2C）
+> 冻结依据：contract-change issue #57（v1.6）；#23 为 v1.5；#21 为 v1.4 退款三态基线
 > 维护人：模块 2 负责人
 > 状态：接口定义已冻结；服务端实现按本文档开发中，联调前以本文档为准
 
@@ -311,7 +311,7 @@
       "direction": "expense",
       "category": { "id": 1, "name": "餐饮", "color": "#F97316", "icon": "🍜" },
       "sourceModality": "image", "sourceRef": "uploads/2026/11/r.jpg",
-      "entryType": "normal", "settledAt": null,
+      "entryType": "normal", "settledAt": null, "matchedTransactionId": null,
       "categoryConfidence": 0.92, "status": "confirmed", "anomalyFlag": false }
   ],
   "page": { "limit": 20, "hasMore": true, "nextCursor": "eyJkIjoiMjAyNi0xMS0xNCIsImlkIjoidHhfLi4uIn0" },
@@ -321,6 +321,7 @@
 
 - `summary` 是**整个筛选集**的合计，不是本页；
 - `summary` **恒只统计 `entry_type='normal'` 且满足 `entryType` 筛选**的记录，中性记录只出现在 `items` 中；因此 `entryType=all` 或 `entryType=refund` 时，`summary.count` 可能与 `items` 条数不一致，金额字段也不含中性记录。
+- `matchedTransactionId`（v1.6 新增）：退款/还款记录（`entryType` 为 `refund`/`repayment`）匹配到的原账单 id，与 §1.4 入站回执的 `matchedTransactionId` 语义一致；`normal` 记录或未匹配原账单的中性记录为 `null`。
 - 游标分页：把 `nextCursor` 原样回传，不要自己拼 `offset`。
 
 ### 2.4 类别字典 `GET /api/categories`

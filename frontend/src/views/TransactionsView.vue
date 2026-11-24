@@ -10,6 +10,7 @@ import LoadingSkeleton from '../components/LoadingSkeleton.vue';
 
 const { categories, loadCategories } = useCategories();
 const selectedCategoryId = ref<number | null>(null);
+const selectedEntryType = ref<'all' | 'normal' | 'refund' | 'repayment'>('all');
 const items = ref<TransactionItem[]>([]);
 const nextCursor = ref<string | null>(null);
 const hasMore = ref(false);
@@ -24,6 +25,7 @@ async function fetchList(reset = true): Promise<void> {
       cursor: reset ? null : nextCursor.value,
       limit: 10,
       categoryId: selectedCategoryId.value,
+      entryType: selectedEntryType.value,
     });
     items.value = reset ? res.items : [...items.value, ...res.items];
     nextCursor.value = res.page.nextCursor;
@@ -46,6 +48,13 @@ onMounted(() => {
     <div class="toolbar">
       <h1 class="title">账单明细</h1>
       <div class="filter">
+        <label for="tx-entry-select">记录类型</label>
+        <select id="tx-entry-select" v-model="selectedEntryType" @change="fetchList(true)">
+          <option value="all">全部（含退款/还款）</option>
+          <option value="normal">仅正常</option>
+          <option value="refund">退款</option>
+          <option value="repayment">还款</option>
+        </select>
         <label for="tx-cat-select">按类别筛选</label>
         <select id="tx-cat-select" v-model="selectedCategoryId" @change="fetchList(true)">
           <option :value="null">全部类别</option>
@@ -64,6 +73,7 @@ onMounted(() => {
       <article v-for="tx in items" :key="tx.id" class="tx-card">
         <div class="tx-main">
           <span class="cat-pill" :style="{ '--cat-color': tx.category?.color ?? '#6B7280' }">{{ tx.category?.name ?? '未分类' }}</span>
+          <span v-if="tx.entryType && tx.entryType !== 'normal'" class="neutral-badge">不计收支{{ tx.settledAt ? ' · 已结清' : '' }}</span>
           <strong>{{ tx.merchant ?? '—' }}</strong>
         </div>
         <div class="tx-meta">
@@ -88,6 +98,7 @@ onMounted(() => {
 .tx-card { background: var(--color-surface); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; justify-content: space-between; align-items: center; }
 .tx-main, .tx-meta { display: flex; align-items: center; gap: var(--space-3); }
 .cat-pill { padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); font-size: var(--text-xs); background-color: var(--cat-color, var(--color-cat-fallback)); color: var(--color-primary-contrast); }
+.neutral-badge { padding: var(--space-1) var(--space-2); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-pill); font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; }
 .time { font-size: var(--text-xs); color: var(--color-text-muted); }
 .btn { align-self: center; padding: var(--space-2) var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); cursor: pointer; }
 .alert-error { padding: var(--space-3); border-radius: var(--radius-md); background: var(--color-danger-bg); color: var(--color-danger); display: flex; justify-content: space-between; align-items: center; }

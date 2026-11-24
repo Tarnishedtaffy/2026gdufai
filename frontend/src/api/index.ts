@@ -74,6 +74,7 @@ export async function listTransactions(query: TransactionQuery = {}): Promise<Tr
   if (query.direction) params.set('direction', query.direction);
   if (query.from) params.set('from', query.from);
   if (query.to) params.set('to', query.to);
+  if (query.entryType) params.set('entryType', query.entryType);
   const qs = params.toString();
   return request<TransactionListResponse>(qs ? `/api/transactions?${qs}` : '/api/transactions');
 }

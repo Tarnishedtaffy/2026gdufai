@@ -9,25 +9,13 @@ import type {
 } from '../types/contract';
 import { normalizeIsoOffset, toDateKey } from '../utils/datetime';
 import { yuanToCents } from '../utils/money';
-import { MOCK_CATEGORIES } from './data';
 import { appendMockTransaction } from './db';
-
-const confirmedByIdempotencyKey = new Map<string, ImportResultItem>();
-const followupRoundByKey = new Map<string, number>();
-
-function findCategoryByNameAndKind(name: string, kind: Direction): CategoryItem {
-  for (const cat of MOCK_CATEGORIES) {
-    if (cat.name === name && cat.kind === kind) {
-      return cat;
-    }
-  }
-  for (const cat of MOCK_CATEGORIES) {
-    if (cat.kind === kind) {
-      return cat;
-    }
-  }
-  return MOCK_CATEGORIES[0];
-}
+import {
+  confirmedByIdempotencyKey,
+  evaluateRefund,
+  findCategoryByNameAndKind,
+  followupRoundByKey,
+} from './refund';
 
 function inferCategory(record: ImportRecord, dir: Direction): CategoryItem {
   const text = `${record.merchant ?? ''} ${record.rawText}`;
@@ -57,34 +45,29 @@ function evaluateRecord(record: ImportRecord): ImportResultItem {
     };
   }
 
-  const effectiveDirection: Direction = record.direction ?? 'expense';
-  const cat = inferCategory(record, effectiveDirection);
-  const categoryRef = { id: cat.id, name: cat.name, kind: cat.kind };
-  const isRefund = record.rawText.includes('退款') || (record.amount !== null && record.amount < 0);
-  if (isRefund) {
-    return {
-      recordId: record.recordId,
-      status: 'rejected',
-      transactionId: null,
-      direction: effectiveDirection,
-      occurredAt: normalizeIsoOffset(record.occurredAt),
-      category: categoryRef,
-      confidence: record.confidence,
-      feedback: [{ field: 'amount', code: 'REFUND_NOT_SUPPORTED', severity: 'blocking' }],
-    };
+  const normalizedOccurredAt = normalizeIsoOffset(record.occurredAt);
+  const amountMissing = record.amount === null || record.amount <= 0;
+  const isRefund = record.rawText.includes('退款');
+
+  // 退款走契约 §1.8 显式原单匹配；金额/时间不全时先按普通追问补齐。
+  if (isRefund && record.amount !== null && record.amount > 0 && normalizedOccurredAt) {
+    return evaluateRefund(record, record.amount, normalizedOccurredAt);
   }
 
   const feedback: FeedbackItem[] = [];
-  if (record.direction === null) {
+  if (!isRefund && record.direction === null) {
     feedback.push({ field: 'direction', code: 'MISSING_DIRECTION', severity: 'blocking' });
   }
-  if (record.amount === null || record.amount <= 0) {
+  if (amountMissing) {
     feedback.push({ field: 'amount', code: 'MISSING_AMOUNT', severity: 'blocking' });
   }
-  const normalizedOccurredAt = normalizeIsoOffset(record.occurredAt);
   if (!normalizedOccurredAt) {
     feedback.push({ field: 'occurredAt', code: 'MISSING_TIME', severity: 'blocking' });
   }
+
+  const effectiveDirection: Direction = record.direction ?? 'expense';
+  const cat = inferCategory(record, effectiveDirection);
+  const categoryRef = { id: cat.id, name: cat.name, kind: cat.kind };
 
   if (feedback.length > 0) {
     const nextRound = (followupRoundByKey.get(record.idempotencyKey) ?? 0) + 1;

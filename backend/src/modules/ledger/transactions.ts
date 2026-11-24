@@ -28,6 +28,8 @@ export interface TransactionItem {
   anomalyFlag: boolean;
   entryType: 'normal' | 'refund' | 'repayment';
   settledAt: string | null;
+  /** v1.6：退款/还款匹配到的原账单 id；normal 或未匹配为 null。 */
+  matchedTransactionId: string | null;
 }
 
 export interface TransactionListResult {
@@ -106,6 +108,7 @@ interface ListRow {
   category_icon: string | null;
   entry_type: 'normal' | 'refund' | 'repayment';
   settled_at: string | null;
+  matched_transaction_id: string | null;
 }
 
 /** 按契约 §2.3 返回账单一览：游标分页 + 整个筛选集汇总。 */
@@ -175,7 +178,7 @@ export function listTransactions(db: Db, userId: string, query: TransactionListQ
     .prepare(
       `SELECT t.id, t.direction, t.amount_cents, t.merchant, t.occurred_at, t.occurred_date,
               t.category_confidence, t.source_modality, t.source_ref, t.status, t.anomaly_flag, t.entry_type,
-              t.settled_at,
+              t.settled_at, t.matched_transaction_id,
               c.id AS category_id, c.name AS category_name, c.color AS category_color, c.icon AS category_icon
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
@@ -221,7 +224,8 @@ export function listTransactions(db: Db, userId: string, query: TransactionListQ
     status: row.status,
     anomalyFlag: row.anomaly_flag === 1,
     entryType: row.entry_type,
-    settledAt: row.settled_at
+    settledAt: row.settled_at,
+    matchedTransactionId: row.matched_transaction_id
   }));
 
   const anyRow = db

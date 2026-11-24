@@ -85,9 +85,12 @@ describe('N5-N8', () => {
       console.log('N5 轮', i, r.status, JSON.stringify(r.feedback.map(f => f.code)));
     }
   });
-  it('N5 退款分支', async () => {
+  it('N5 退款分支首轮追问新码', async () => {
     const r = (await mockImportBatch(batch('r1', 'k-refund', { rawText: '退款 30 元' }))).results[0];
     console.log('N5 退款=', r.status, JSON.stringify(r.feedback));
+    expect(r.status).toBe('pending_followup');
+    expect(r.feedback[0].code).toBe('MISSING_ORIGINAL_TRANSACTION');
+    expect(r.feedback[0].field).toBe('originalTransactionId');
   });
   it('N8 收入类别推断（工资）', async () => {
     const r = (await mockImportBatch(batch('i1', 'k-income', { direction: 'income' }))).results[0];

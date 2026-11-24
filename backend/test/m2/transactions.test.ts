@@ -67,6 +67,7 @@ describe('GET /api/transactions', () => {
     expect(result.status).toBe(200);
     expect(result.body.items.map((item: { id: string }) => item.id)).toEqual(['tx_a', 'tx_b']);
     expect(result.body.summary).toMatchObject({ count: 3, expenseCents: 6000, incomeCents: 0 });
+    expect(result.body.items[0].matchedTransactionId).toBeNull();
     expect(result.body.page.hasMore).toBe(true);
     expect(result.body.page.nextCursor).toBeTypeOf('string');
   });

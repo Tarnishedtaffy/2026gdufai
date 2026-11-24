@@ -73,6 +73,10 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
     const dirTxs: TransactionItem[] = [];
 
     for (const tx of allTransactions) {
+      // 对齐契约：统计只聚合 confirmed 的 normal 记录，中性（退款/还款）与已作废不计收支。
+      if (tx.status !== 'confirmed' || (tx.entryType ?? 'normal') !== 'normal') {
+        continue;
+      }
       const txKey = query.dimension === 'recent7' ? toDateKey(tx.occurredAt) : tx.occurredAt.slice(0, period.length);
       if (txKey !== period) {
         continue;
