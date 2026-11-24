@@ -36,16 +36,21 @@ export function mockGetCategories(): CategoryItem[] {
 }
 
 /**
- * 模拟游标分页查询账单明细。
+ * 模拟游标分页查询账单明细（对齐契约 §2.3：默认只列 normal，summary 恒只统计 normal）。
  * @param query 查询筛选参数
  */
 export function mockListTransactions(query: TransactionQuery): TransactionListResponse {
   const limit = query.limit ?? 10;
+  const entryType = query.entryType ?? 'normal';
   const filtered: TransactionItem[] = [];
-  let totalExpenseCents = 0;
-  let totalIncomeCents = 0;
+  let summaryExpenseCents = 0;
+  let summaryIncomeCents = 0;
+  let summaryCount = 0;
 
   for (const tx of storeTransactions) {
+    if (tx.status !== 'confirmed') {
+      continue;
+    }
     if (query.categoryId !== null && query.categoryId !== undefined && tx.category?.id !== query.categoryId) {
       continue;
     }
@@ -58,16 +63,27 @@ export function mockListTransactions(query: TransactionQuery): TransactionListRe
     if (query.to && tx.occurredDate > query.to) {
       continue;
     }
-    filtered.push(tx);
-    if (tx.direction === 'expense') {
-      totalExpenseCents += tx.amountCents;
-    } else {
-      totalIncomeCents += tx.amountCents;
+    if ((tx.entryType ?? 'normal') === 'normal') {
+      summaryCount += 1;
+      if (tx.direction === 'expense') {
+        summaryExpenseCents += tx.amountCents;
+      } else {
+        summaryIncomeCents += tx.amountCents;
+      }
     }
+    if (entryType !== 'all' && (tx.entryType ?? 'normal') !== entryType) {
+      continue;
+    }
+    filtered.push(tx);
   }
 
   const startIdx = query.cursor ? Math.max(0, Number(query.cursor) || 0) : 0;
-  const items = filtered.slice(startIdx, startIdx + limit);
+  // 对齐真实列表：每条必回 entryType 与 matchedTransactionId（缺省视为 normal / null）。
+  const items = filtered.slice(startIdx, startIdx + limit).map((tx) => ({
+    ...tx,
+    entryType: tx.entryType ?? 'normal',
+    matchedTransactionId: tx.matchedTransactionId ?? null,
+  }));
   const nextIdx = startIdx + items.length;
   const hasMore = nextIdx < filtered.length;
 
@@ -80,9 +96,9 @@ export function mockListTransactions(query: TransactionQuery): TransactionListRe
       entryType: query.entryType ?? 'normal',
     },
     summary: {
-      expenseCents: totalExpenseCents,
-      incomeCents: totalIncomeCents,
-      count: filtered.length,
+      expenseCents: summaryExpenseCents,
+      incomeCents: summaryIncomeCents,
+      count: summaryCount,
     },
     items,
     page: {

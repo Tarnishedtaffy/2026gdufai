@@ -37,6 +37,8 @@ export interface ImportRecord {
   merchant: string | null;
   occurredAt: string | null;
   chatAt: string | null;
+  /** 契约 §1.3：退款/还款场景下的原账单 id；普通记账不传。 */
+  originalTransactionId?: string | null;
   rawText: string;
   modality: Modality;
   sourceRef: string | null;
@@ -68,6 +70,8 @@ export interface ImportResultItem {
   recordId: string;
   status: ImportStatus;
   transactionId: string | null;
+  /** 契约 §1.4：匹配到的原账单 id；未匹配或普通记账为 null。 */
+  matchedTransactionId?: string | null;
   direction: Direction;
   occurredAt: string | null;
   category: ImportCategoryRef | null;
@@ -181,6 +185,8 @@ export interface TransactionItem {
   anomalyFlag: boolean | null;
   entryType?: 'normal' | 'refund' | 'repayment';
   settledAt?: string | null;
+  /** 契约 §2.3 v1.6：退款/还款匹配到的原账单 id；normal 或未匹配为 null。 */
+  matchedTransactionId?: string | null;
 }
 
 export interface TransactionPage {

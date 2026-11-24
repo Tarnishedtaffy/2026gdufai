@@ -146,10 +146,51 @@ describe('入站状态机', () => {
     console.log('追问轮次状态:', statuses.join(' → '));
     expect(statuses).toEqual(['pending_followup','pending_followup','rejected','rejected','rejected']);
   });
-  it('退款/负数金额 → rejected + REFUND_NOT_SUPPORTED', async () => {
-    const r = (await mockImportBatch(batch('rf', 'k-rf', { rawText: '退款 30 元' }))).results[0];
-    expect(r.status).toBe('rejected');
-    expect(r.feedback[0].code).toBe('REFUND_NOT_SUPPORTED');
+  it('退款无原单 → 首轮追问 MISSING_ORIGINAL_TRANSACTION', async () => {
+    const r = (await mockImportBatch(batch('rf1', 'k-rf-ask', { rawText: '退款 30 元' }))).results[0];
+    expect(r.status).toBe('pending_followup');
+    expect(r.feedback[0].code).toBe('MISSING_ORIGINAL_TRANSACTION');
+    expect(r.feedback[0].field).toBe('originalTransactionId');
+  });
+  it('退款原单不存在 → ORIGINAL_NOT_FOUND，次轮兜底中性 ORIGINAL_NOT_FOUND_RECORDED', async () => {
+    const r1 = (await mockImportBatch(batch('rf2', 'k-rf-miss', { rawText: '退款 30 元', originalTransactionId: 'tx-nope' }))).results[0];
+    expect(r1.status).toBe('pending_followup');
+    expect(r1.feedback[0].code).toBe('ORIGINAL_NOT_FOUND');
+    const r2 = (await mockImportBatch(batch('rf2b', 'k-rf-miss', { rawText: '退款 30 元', originalTransactionId: 'tx-nope' }))).results[0];
+    expect(r2.status).toBe('confirmed');
+    expect(r2.feedback[0].code).toBe('ORIGINAL_NOT_FOUND_RECORDED');
+    expect(r2.matchedTransactionId).toBeNull();
+    expect(r2.direction).toBe('income');
+  });
+  it('退款匹配原单全额 → REFUND_RECORDED_NEUTRAL，原单作废', async () => {
+    const list0 = mockListTransactions({ categoryId: null, from: null, to: null, direction: null, entryType: 'normal' });
+    const target = list0.items[0];
+    const r = (await mockImportBatch(batch('rf3', 'k-rf-full', {
+      rawText: '退款', amount: target.amountCents / 100, originalTransactionId: target.id,
+    }))).results[0];
+    expect(r.status).toBe('confirmed');
+    expect(r.feedback[0].code).toBe('REFUND_RECORDED_NEUTRAL');
+    expect(r.matchedTransactionId).toBe(target.id);
+    const after = mockListTransactions({ categoryId: null, from: null, to: null, direction: null, entryType: 'normal' })
+      .items.find(tx => tx.id === target.id);
+    expect(after).toBeUndefined();
+  });
+  it('部分退款 → ORIGINAL_AMOUNT_ADJUSTED，原单金额改为剩余', async () => {
+    const list0 = mockListTransactions({ categoryId: null, from: null, to: null, direction: null, entryType: 'normal' });
+    const target = list0.items[0];
+    const refundCents = Math.floor(target.amountCents / 2);
+    const r = (await mockImportBatch(batch('rf4', 'k-rf-part', {
+      rawText: '部分退款', amount: refundCents / 100, originalTransactionId: target.id,
+    }))).results[0];
+    expect(r.status).toBe('confirmed');
+    expect(r.feedback[0].code).toBe('ORIGINAL_AMOUNT_ADJUSTED');
+    const after = mockListTransactions({ categoryId: null, from: null, to: null, direction: null, entryType: 'normal' })
+      .items.find(tx => tx.id === target.id);
+    expect(after?.amountCents).toBe(target.amountCents - refundCents);
+  });
+  it('负数金额按缺失处理 → MISSING_AMOUNT（不再触发退款分支）', async () => {
+    const r = (await mockImportBatch(batch('rf5', 'k-rf-neg', { amount: -30 }))).results[0];
+    expect(r.feedback.some(f => f.code === 'MISSING_AMOUNT')).toBe(true);
   });
   it('收入方向推断到工资类', async () => {
     const r = (await mockImportBatch(batch('inc', 'k-inc', { direction: 'income' }))).results[0];
@@ -173,6 +214,27 @@ describe('响应形状', () => {
     expect(Object.keys(r.items[0])).toContain('occurredDate');
     expect(Object.keys(r.items[0])).toContain('sourceModality');
     expect(Object.keys(r.items[0])).toContain('anomalyFlag');
+    expect(Object.keys(r.items[0])).toContain('entryType');
+    expect(Object.keys(r.items[0])).toContain('matchedTransactionId');
+  });
+  it('entryType=all 返回中性记录且 summary 恒只统计 normal', () => {
+    const all = mockListTransactions({ categoryId: null, from: null, to: null, direction: null, entryType: 'all' });
+    const neutral = all.items.filter(tx => tx.entryType === 'refund' || tx.entryType === 'repayment');
+    expect(neutral.length, 'mock 样例包含退款/还款中性记录').toBeGreaterThan(0);
+    for (const tx of neutral) {
+      expect(tx.matchedTransactionId === null || typeof tx.matchedTransactionId === 'string').toBe(true);
+    }
+    const normalOnly = mockListTransactions({ categoryId: null, from: null, to: null, direction: null, entryType: 'normal' });
+    expect(all.summary.count).toBe(normalOnly.summary.count);
+    expect(all.summary.expenseCents).toBe(normalOnly.summary.expenseCents);
+    expect(all.summary.incomeCents).toBe(normalOnly.summary.incomeCents);
+    expect(all.items.length, '列表条数可大于 summary.count').toBeGreaterThan(all.summary.count);
+  });
+  it('账单一览对中性记录显示不计收支标识', () => {
+    const code = readFileSync(join(SRC, 'views/TransactionsView.vue'), 'utf8');
+    expect(code).toContain('neutral-badge');
+    expect(code).toContain('不计收支');
+    expect(code).toContain("tx.entryType !== 'normal'");
   });
   it('预算字段齐全', () => {
     const b = mockGetBudgets('2026-11')[0];

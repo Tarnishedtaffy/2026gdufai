@@ -133,3 +133,25 @@
 - **人工审核**：待审核
 - **遗留问题**：#38、#18、#19 待分配；#40/#41 由 M1 负责人在 #35 处理
 
+
+### LOG-Tarnishedtaffy-20261124-03
+
+- **时间**：2026-11-24 11:40（+08:00）
+- **工具/模型**：Trae / GLM-5.3-Flash
+- **模块 / 分支 / PR**：前端 + M2 + docs / `feat/frontend-neutral-sync` / 待建
+- **任务**：完成 issue #18 剩余三项（mock 退款语义、账单一览中性标识、matchedTransactionId 契约新增）
+- **关键提示词**：「开始处理 #18 剩余的三项工作」
+- **代理做了什么**：
+  - contract-change：开 #57（账单一览响应新增 `matchedTransactionId`），契约文档升 v1.6，§2.3 schema 增字段并补语义说明（只增不删）
+  - `backend/src/modules/ledger/transactions.ts`：账单一览 SELECT/`ListRow`/映射补 `matched_transaction_id`；`test/m2/transactions.test.ts` 补 null 断言
+  - `frontend/src/mock/import.ts` + 新文件 `frontend/src/mock/refund.ts`：退款不再返回 `REFUND_NOT_SUPPORTED`，对齐后端 §1.8 三态——首轮缺原单追问 `MISSING_ORIGINAL_TRANSACTION`/`ORIGINAL_NOT_FOUND`，次轮兜底中性 `ORIGINAL_NOT_FOUND_RECORDED`，匹配成功按差额 `REFUND_RECORDED_NEUTRAL`/`ORIGINAL_AMOUNT_ADJUSTED`/`REFUND_EXCESS_AS_INCOME`（原单作废/调额、超额入账）；负数金额回归 `MISSING_AMOUNT`
+  - `frontend/src/mock/db.ts`：列表默认 `normal`、支持 `entryType=all/refund/repayment`、`summary` 恒只统计 confirmed normal、排除 void、输出归一化 `entryType`/`matchedTransactionId`
+  - `frontend/src/mock/stats.ts`：统计只聚合 confirmed normal，中性记录不计收支
+  - `frontend/src/mock/data.ts`：补退款/还款中性样例与已结清贷款原单样例（虚构数据）
+  - `frontend/src/views/TransactionsView.vue`：新增「记录类型」筛选（默认全部），中性记录显示「不计收支」（已结清加后缀）`neutral-badge`；`frontend/src/api/index.ts` 透传 `entryType`
+  - `frontend/src/types/contract.ts`：`ImportRecord.originalTransactionId?`、`ImportResultItem.matchedTransactionId?`、`TransactionItem.matchedTransactionId?`
+  - 测试：`bugtest.test.ts` 重写退款用例（追问/兜底/全额/部分/负数）+ `entryType=all` summary 口径 + 「不计收支」模板断言；`verify2.test.ts` N5 退款断言同步
+- **决策**：拆出 `mock/refund.ts` 以满足单文件 ≤200 行硬约束；mock 退款「首轮追问、次轮兜底」与后端 intake 语义一致；`matchedTransactionId` 语义与 §1.4 入站回执对齐，normal/未匹配为 `null`
+- **验证**：`pnpm -r typecheck` / `lint` / `test` 全绿；backend 345 项、frontend 84 项
+- **人工审核**：待审核
+- **遗留问题**：采集页「退款/还款原账单选择入口」（#18 第 4 项可选项）未实现，依赖 M1 的 `originalTransactionId` 交接；#18 其余项（反馈码集中、entryType 类型）已在前序会话完成
