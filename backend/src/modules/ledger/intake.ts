@@ -120,6 +120,52 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+/**
+ * 中性记录唯一冲突自愈（#19）：与正常记账路径一致。
+ * 事务内撞同幂等键的唯一约束时整体回滚（原单作废/调整等副作用一并撤销），
+ * 再按幂等键回查已有账单，补写 intake_log 并返回 duplicate；其余错误原样抛出。
+ */
+function persistNeutralWithHeal(
+  db: Db,
+  batch: RawBatch,
+  record: RawRecord,
+  round: number,
+  transactionFn: () => RecordResult
+): RecordResult {
+  try {
+    return db.transaction(transactionFn)();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const existingTransaction = findTransactionByIdempotencyKey(db, record.idempotencyKey);
+      if (existingTransaction !== null) {
+        const duplicateFeedback = [warning(null, 'DUPLICATE_RECORD')];
+        saveIntake(db, {
+          idempotencyKey: record.idempotencyKey,
+          recordId: record.recordId,
+          batchId: batch.batchId,
+          status: 'confirmed',
+          followupRound: round,
+          transactionId: existingTransaction.id,
+          feedback: duplicateFeedback
+        });
+        return {
+          recordId: record.recordId,
+          status: 'duplicate',
+          transactionId: existingTransaction.id,
+          direction: existingTransaction.direction,
+          occurredAt: existingTransaction.occurredAt,
+          category: existingTransaction.category,
+          confidence: null,
+          matchedTransactionId: existingTransaction.matchedTransactionId,
+          interestTransactionId: findInterestTransactionId(db, record.idempotencyKey),
+          feedback: duplicateFeedback
+        };
+      }
+    }
+    throw error;
+  }
+}
+
 function rejectedResult(record: RawRecord, codes: FeedbackItem[]): RecordResult {
   return {
     recordId: record.recordId,
@@ -382,8 +428,7 @@ function persistUnmatchedSpecial(
   const direction: Direction = kind === 'refund' ? 'income' : 'expense';
   const category = specialFallbackCategory(categories, direction);
   const principalCents = kind === 'repayment' ? (record.principalCents ?? resolved.amountCents) : null;
-  let result: RecordResult | undefined;
-  db.transaction(() => {
+  return persistNeutralWithHeal(db, batch, record, round, () => {
     const neutral = persistSpecialEntry(
       db,
       batch,
@@ -398,15 +443,10 @@ function persistUnmatchedSpecial(
     const interestCents = kind === 'repayment' ? (record.interestCents ?? 0) : 0;
     if (interestCents > 0) {
       const interestId = insertInterestEntry(db, record, resolved, interestCents, null, categories);
-      result = { ...neutral, interestTransactionId: interestId };
-    } else {
-      result = neutral;
+      return { ...neutral, interestTransactionId: interestId };
     }
-  })();
-  if (result !== undefined) {
-    return result;
-  }
-  throw new Error('persistUnmatchedSpecial 未返回结果');
+    return neutral;
+  });
 }
 
 /** 退款：显式原单匹配（1D），保持 v1.4 三态；未匹配时首轮追问、次轮兜底。 */
@@ -457,9 +497,8 @@ function handleRefund(
   if (resolution.aged) {
     feedback.push(warning('originalTransactionId', 'ORIGINAL_TRANSACTION_AGED'));
   }
-  let result: RecordResult | undefined;
 
-  db.transaction(() => {
+  return persistNeutralWithHeal(db, batch, record, round, () => {
     if (diff === 0) {
       voidTransaction(db, original.id, record.userId, nowIsoShanghai());
       feedback.push(warning('originalTransactionId', 'REFUND_RECORDED_NEUTRAL'));
@@ -477,7 +516,7 @@ function handleRefund(
       feedback.push(warning('originalTransactionId', 'REFUND_EXCESS_AS_INCOME'));
     }
 
-    result = persistSpecialEntry(
+    const neutral = persistSpecialEntry(
       db,
       batch,
       record,
@@ -501,12 +540,8 @@ function handleRefund(
         original.id
       );
     }
-  })();
-
-  if (result !== undefined) {
-    return result;
-  }
-  throw new Error('persistSpecialEntry 未返回结果');
+    return neutral;
+  });
 }
 
 /**
@@ -636,8 +671,7 @@ function handleRepayment(
     )
   );
 
-  let result: RecordResult | undefined;
-  db.transaction(() => {
+  return persistNeutralWithHeal(db, batch, record, round, () => {
     if (diff === 0) {
       settleLoan(db, original.id, record.userId, nowIsoShanghai());
     }
@@ -654,15 +688,10 @@ function handleRepayment(
     );
     if (interestCents > 0) {
       const interestId = insertInterestEntry(db, record, resolved, interestCents, original.id, categories);
-      result = { ...neutral, interestTransactionId: interestId };
-    } else {
-      result = neutral;
+      return { ...neutral, interestTransactionId: interestId };
     }
-  })();
-  if (result !== undefined) {
-    return result;
-  }
-  throw new Error('persistSpecialEntry 未返回结果');
+    return neutral;
+  });
 }
 
 function processRecord(
