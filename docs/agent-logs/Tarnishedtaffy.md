@@ -133,3 +133,21 @@
 - **人工审核**：待审核
 - **遗留问题**：#38、#18、#19 待分配；#40/#41 由 M1 负责人在 #35 处理
 
+### LOG-Tarnishedtaffy-20261124-01
+
+- **时间**：2026-11-24 10:51（+08:00）
+- **工具/模型**：Trae / GLM-5.3-Flash
+- **模块 / 分支 / PR**：M2 审阅 / 无代码改动 / #54（评论）
+- **任务**：审议仓库开放的 PR 与 issue 修复，对 PR #54 出评审意见
+- **关键提示词**：「读一遍仓库的协议 然后开始审议新的pr或者是issue的修复 如果看到bug就提issue 如果pr有问题就给他review或者comment」「你直接登录我的号就行了 我帮你验证」
+- **代理做了什么**：
+  - 梳理仓库状态：3 个开放 PR（#54 非 Draft，#48/#35 为 Draft）、11 个开放 issue，确定先审 #54
+  - 在 GitHub Codespace（仓库 `gh pr checkout 54`）对照 origin/main 逐路径审阅预算告警重算：导入按 confirmed 结果的（月，类）整月重算、PATCH 同事务重算旧/新（月，类）、void 同事务、reassign 按目标类别月份、`scope=total` 经 `listBudgetsForRecalcMany` 的 `OR scope='total'` 覆盖
+  - 核对「只筛 confirmed」的正确性：`transactions` 仅 `confirmed/void` 两态，pending 留在 `batch_records`，duplicate 不写库；退款/还款副产物不引入漏算月份
+  - 本地验证：`pnpm -r typecheck` / `lint` 全绿，352 项测试通过（含新增 `budget-recalc.test.ts` 7 例）
+  - 通过 gh CLI（设备码授权，以 `Tarnishedtaffy` 身份）在 #54 发布评审评论：代码正确可合并，但 PR 描述为空违反模板、缺 `Closes #38`，合并前需补正；可选建议补还款+利息导入用例；提醒 README 分工表 `Z_Wen` 与实际账号 `ONFAIL` 不一致
+- **决策**：#54 代码实质通过、流程项未齐，采取「comment 待补正后再 approve 合并」而非直接 approve；Draft 的 #48/#35 等转正后再审，本轮不动；新发现的「README 账号不一致」属资料核对，未单开 issue
+- **验证**：typecheck / lint / test 全绿；评审评论已发布（`#54#issuecomment-7120531041`）
+- **人工审核**：待审核
+- **遗留问题**：等 ONFAIL 补 PR 模板与 `Closes #38` 后 approve 并合并；#48、#35 转正后待审；#40、#41 仍开放（M1）
+
