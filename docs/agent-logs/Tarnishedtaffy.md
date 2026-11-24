@@ -133,3 +133,21 @@
 - **人工审核**：待审核
 - **遗留问题**：#38、#18、#19 待分配；#40/#41 由 M1 负责人在 #35 处理
 
+### LOG-Tarnishedtaffy-20261124-02
+
+- **时间**：2026-11-24 11:10（+08:00）
+- **工具/模型**：Trae / GLM-5.3-Flash
+- **模块 / 分支 / PR**：M2 / `fix/m2-neutral-duplicate-heal` / #56
+- **任务**：从开放 issue 中挑本人模块内可修的项，实现 #19 需求 2 并审计 #18 剩余状态
+- **关键提示词**：「看一下有没有issue可以修复」
+- **代理做了什么**：
+  - 盘点 11 个开放 issue：#38/#40/#41/#6/#7 已有负责人，#24/#21/#16/#12 为纯契约变更，可修的是 #19（M2）与 #18（frontend）
+  - #19 需求 2：`backend/src/modules/ledger/intake.ts` 新增 `persistNeutralWithHeal`——事务撞 `SQLITE_CONSTRAINT_UNIQUE` 时整体回滚（原单作废/调整、利息等副作用一并撤销），按幂等键回查已有账单、补写 `intake_log` 并返回 `duplicate`，与正常记账路径一致；接入三条中性路径（`persistUnmatchedSpecial`、`handleRefund` 匹配分支、`handleRepayment` 匹配分支）
+  - `backend/test/m2/import.test.ts` 补用例：手工插入中性退款但不写 `intake_log`，同 key 重提返回 `duplicate`、账单数不增、原单未被二次作废、自愈后二次提交走早退分支
+  - #18 审计：反馈码已集中在 `packages/capture-flow/src/feedback.ts`（v1.4 八码 + v1.5 四码齐全），未知码回退文案已在 `feedbackMessages` 实现，`entryType` 过滤已在 `frontend/src/types/contract.ts`；**剩余**：`frontend/src/mock/import.ts:73` 仍返回 `REFUND_NOT_SUPPORTED`、无「不计收支」UI 标识、列表响应缺 `matchedTransactionId`（契约新增字段，需走 contract-change 并同步 backend）
+  - PR #56 正文写明 #19 需求 1（`REFUND_EXCEEDS_ORIGINAL` warning）建议作废：v1.4 已改为超额显式处理语义（`REFUND_EXCESS_AS_INCOME` / `ORIGINAL_AMOUNT_ADJUSTED`），不存在「退款超额无提示」场景
+- **决策**：#19 需求 2 不新增反馈码，无契约变更，直接实现；需求 1 随 PR 建议作废而非实现；纯利息路径（派生键 `${key}#interest`）撞键场景不同，不纳入本 PR；#18 剩余项工作量独立（含契约变更），留待下一会话单独处理
+- **验证**：`pnpm -r typecheck` / `lint` 全绿；backend 346 项（新增 1 项）、frontend 78 项全绿
+- **人工审核**：待审核
+- **遗留问题**：#19 待 PR #56 合并后整体关闭（若需求 1 作废无异议）；#18 剩余三项（mock 清理、不计收支标识、`matchedTransactionId` 契约字段）待新分支处理
+
