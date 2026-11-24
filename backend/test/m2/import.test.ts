@@ -1002,4 +1002,70 @@ describe('POST /api/transactions/import', () => {
     };
     expect(intake.status).toBe('confirmed');
   });
+
+  it('中性记录已落库但缺 intake 记录时自愈为 duplicate，且不重复执行原单副作用', async () => {
+    const key = 'k-neutral-wedge';
+    const before = transactionCount();
+    // 原单（active 支出）与一笔手工插入的中性退款（无 intake 记录）。
+    db.prepare(
+      `INSERT INTO transactions
+         (id, user_id, direction, direction_source, amount_cents, merchant, note, occurred_at, occurred_date,
+          time_source, chat_at, category_id, category_source, category_confidence, status, source_modality,
+          source_ref, anomaly_flag, idempotency_key, created_at, updated_at,
+          entry_type, matched_transaction_id, principal_cents, settled_at)
+       VALUES ('tx_neutral_orig', 'u_001', 'expense', 'explicit', 29900, '鞋店', '买鞋 299',
+               '2026-11-14T12:00:00+08:00', '2026-11-14', 'explicit', NULL, 1, 'rule', 0.9, 'confirmed',
+               'text', NULL, 0, 'k-neutral-orig', '2026-11-14T12:00:00+08:00', '2026-11-14T12:00:00+08:00',
+               'normal', NULL, NULL, NULL),
+              ('tx_neutral_wedge', 'u_001', 'income', 'category', 29900, '鞋店', '退款 299',
+               '2026-11-15T12:00:00+08:00', '2026-11-15', 'explicit', NULL, 9, 'rule', 0.3, 'confirmed',
+               'text', NULL, 0, ?, '2026-11-15T12:00:00+08:00', '2026-11-15T12:00:00+08:00',
+               'refund', 'tx_neutral_orig', NULL, NULL)`
+    ).run(key);
+
+    const response = await send([
+      record({
+        idempotencyKey: key,
+        rawText: '退款 299',
+        amount: 299,
+        originalTransactionId: 'tx_neutral_orig'
+      })
+    ]);
+    const item = response.body.results[0];
+    expect(item.status).toBe('duplicate');
+    expect(item.transactionId).toBe('tx_neutral_wedge');
+    expect(item.matchedTransactionId).toBe('tx_neutral_orig');
+    expect(item.direction).toBe('income');
+    expect(item.feedback).toEqual([
+      { field: null, code: 'DUPLICATE_RECORD', severity: 'warning' }
+    ]);
+    // 账单数不增，原单未被二次作废（事务整体回滚）。
+    expect(transactionCount()).toBe(before + 2);
+    const originalRow = db
+      .prepare('SELECT status FROM transactions WHERE id = ?')
+      .get('tx_neutral_orig') as { status: string };
+    expect(originalRow.status).toBe('confirmed');
+
+    const intake = db.prepare('SELECT status FROM intake_log WHERE idempotency_key = ?').get(key) as {
+      status: string;
+    };
+    expect(intake.status).toBe('confirmed');
+
+    // 自愈后再次提交走早退 duplicate 分支，不再触发任何副作用。
+    const again = await send([
+      record({
+        idempotencyKey: key,
+        rawText: '退款 299',
+        amount: 299,
+        originalTransactionId: 'tx_neutral_orig'
+      })
+    ]);
+    expect(again.body.results[0].status).toBe('duplicate');
+    expect(again.body.results[0].transactionId).toBe('tx_neutral_wedge');
+    expect(transactionCount()).toBe(before + 2);
+    const originalRowAgain = db
+      .prepare('SELECT status FROM transactions WHERE id = ?')
+      .get('tx_neutral_orig') as { status: string };
+    expect(originalRowAgain.status).toBe('confirmed');
+  });
 });
