@@ -41,6 +41,7 @@ export async function getStats(query: StatsQuery): Promise<StatsResponse> {
   }
   const params = new URLSearchParams();
   params.set('dimension', query.dimension);
+  if (query.categoryIds?.length) params.set('categoryIds', query.categoryIds.join(','));
   if (query.direction) {
     params.set('direction', query.direction);
   }

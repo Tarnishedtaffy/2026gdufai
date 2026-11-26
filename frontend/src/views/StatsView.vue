@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import QueryPanel from '../components/QueryPanel.vue';
 import { computed, onMounted, ref } from 'vue';
 import { getStats } from '../api/index';
 import type { StatsDimension, StatsResponse } from '../types/contract';
@@ -58,6 +59,7 @@ onMounted(() => {
       </div>
     </div>
 
+    <QueryPanel />
     <LoadingSkeleton v-if="loading" :rows="3" />
     <div v-else-if="error" class="alert-error" role="alert">
       <span>{{ error }}</span>
