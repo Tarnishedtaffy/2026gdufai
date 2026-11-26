@@ -65,6 +65,7 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
   let totalExpenseCents = 0;
   let totalIncomeCents = 0;
   let totalCount = 0;
+  let hasRecords = false;
 
   for (const period of keys) {
     let bucketExp = 0;
@@ -73,14 +74,12 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
     const dirTxs: TransactionItem[] = [];
 
     for (const tx of allTransactions) {
-      // 对齐契约：统计只聚合 confirmed 的 normal 记录，中性（退款/还款）与已作废不计收支。
-      if (tx.status !== 'confirmed' || (tx.entryType ?? 'normal') !== 'normal') {
-        continue;
-      }
       const txKey = query.dimension === 'recent7' ? toDateKey(tx.occurredAt) : tx.occurredAt.slice(0, period.length);
-      if (txKey !== period) {
+      if (txKey !== period || tx.status !== 'confirmed' || (direction !== 'all' && tx.direction !== direction)) {
         continue;
       }
+      hasRecords = true;
+      if ('entryType' in tx && tx.entryType && tx.entryType !== 'normal') continue;
       bucketCount += 1;
       if (tx.direction === 'expense') bucketExp += tx.amountCents;
       if (tx.direction === 'income') bucketInc += tx.amountCents;
@@ -143,7 +142,7 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
       unit: 'cent',
       basis: { dateField: 'occurred_date', timezone: 'Asia/Shanghai', includeVoid: false },
       generatedAt: nowIso(),
-      isEmpty: totalCount === 0,
+      isEmpty: !hasRecords,
     },
   };
 }

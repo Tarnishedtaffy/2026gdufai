@@ -112,6 +112,20 @@ describe('GET /api/transactions', () => {
     expect(result.body.summary).toMatchObject({ count: 3, expenseCents: 6000 });
   });
 
+  it('带原单关联的超额退款收入在 normal 列表中保留原单 id', async () => {
+    insert('tx_excess', '2026-10-01', 1250, 11);
+    try {
+      db.prepare("UPDATE transactions SET direction='income', matched_transaction_id=? WHERE id=?").run('tx_a', 'tx_excess');
+      const result = await list('entryType=normal&direction=income&from=2026-10-01&to=2026-10-01');
+      expect(result.status).toBe(200);
+      expect(result.body.items).toHaveLength(1);
+      expect(result.body.items[0]).toMatchObject({ id: 'tx_excess', entryType: 'normal', matchedTransactionId: 'tx_a' });
+    } finally {
+      db.prepare('DELETE FROM transactions WHERE id=?').run('tx_excess');
+    }
+  });
+
+
   it('非法方向返回 422', async () => {
     const result = await list('direction=all');
     expect(result.status).toBe(422);
