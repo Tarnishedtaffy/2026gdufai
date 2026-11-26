@@ -11,6 +11,7 @@ const data = ref<StatsResponse | null>(null);
 const netCents = ref(0);
 const loading = ref(false);
 const error = ref<string | null>(null);
+let latestRequestId = 0;
 
 const maxBucketCents = computed(() => {
   if (!data.value) return 1;
@@ -22,19 +23,23 @@ const maxBucketCents = computed(() => {
 });
 
 async function loadStats(): Promise<void> {
+  const requestId = ++latestRequestId;
+  const requestedDimension = dimension.value;
   loading.value = true;
   error.value = null;
   try {
     const [expenseData, allData] = await Promise.all([
-      getStats({ dimension: dimension.value, direction: 'expense' }),
-      getStats({ dimension: dimension.value, direction: 'all' })
+      getStats({ dimension: requestedDimension, direction: 'expense' }),
+      getStats({ dimension: requestedDimension, direction: 'all' })
     ]);
+    if (requestId !== latestRequestId) return;
     data.value = expenseData;
     netCents.value = allData.summary.netCents;
   } catch (err: unknown) {
+    if (requestId !== latestRequestId) return;
     error.value = err instanceof Error ? err.message : '加载统计数据失败';
   } finally {
-    loading.value = false;
+    if (requestId === latestRequestId) loading.value = false;
   }
 }
 
