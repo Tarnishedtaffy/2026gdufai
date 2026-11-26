@@ -15,7 +15,7 @@ const fieldErrors = ref<Partial<Record<CaptureEditableField, string>>>({});
 const statusText = { confirmed: '已入库', pending_followup: '待追问', duplicate: '已记过，沿用原账单', rejected: '已放弃处理' };
 const editable = computed(() => !props.locked && (!props.row.result || props.row.result.status === 'pending_followup'));
 
-/** 同步发生变化的草稿字段，不重写等价的手工输入或尚未修正的无效输入。 */
+/** 已核对的外部补丁替换该字段的无效输入，其他字段的校验错误继续阻止确认。 */
 function syncField<T extends string | null>(
   field: CaptureEditableField,
   input: Ref<T>,
@@ -23,7 +23,12 @@ function syncField<T extends string | null>(
   formatted: T,
   reset: boolean,
 ): void {
-  if (reset || (!fieldErrors.value[field] && parseCaptureEdit(field, input.value).patch?.[field] !== value)) {
+  if (fieldErrors.value[field]) {
+    delete fieldErrors.value[field];
+    error.value = Object.values(fieldErrors.value)[0] ?? null;
+    emit('change', props.row.record.recordId, null, error.value);
+    input.value = formatted;
+  } else if (reset || parseCaptureEdit(field, input.value).patch?.[field] !== value) {
     input.value = formatted;
   }
 }

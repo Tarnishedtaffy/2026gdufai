@@ -79,6 +79,7 @@ it.each([
 it('同一张待追问小票卡片显示识别补充金额，并保留未改动字段的编辑错误', async () => {
   class TestDocument { activeElement = null; }
   vi.stubGlobal('Document', TestDocument);
+  vi.stubGlobal('ShadowRoot', class {});
   vi.stubGlobal('document', new TestDocument());
   let serial = 0;
   const importBatch = vi.fn(async (batch: ImportBatch) => ({
@@ -114,13 +115,27 @@ it('同一张待追问小票卡片显示识别补充金额，并保留未改动�
     const error = change.mock.lastCall?.[2];
     expect(error).toBeTruthy();
 
-    row.value = session.update(recordId, { amount: 32.5 }).records[0]!;
+    row.value = session.update(recordId, {
+      amount: 32.5, merchant: '虚构新商户', direction: 'income',
+    }).records[0]!;
     await nextTick();
     expect(findNode(mounted.root, 'draft-amount-0').value).toBe('32.5');
+    expect(findNode(mounted.root, 'draft-merchant-0').value).toBe('虚构新商户');
+    const select = findNode(mounted.root, 'draft-direction-0');
+    expect(select.options[select.selectedIndex]?.value).toBe('income');
     expect(findNode(mounted.root, 'draft-time-0').value).toBe('2026-02-31T12:00');
     expect(visibleText(mounted.root)).toContain(error!);
     expect(change).toHaveBeenCalledTimes(1);
     expect(importBatch).toHaveBeenCalledTimes(1);
+    row.value = session.update(recordId, {
+      merchant: null, direction: null, occurredAt: '2026-11-23T12:00:00+08:00',
+    }).records[0]!;
+    await nextTick();
+    expect(findNode(mounted.root, 'draft-time-0').value).toBe('2026-11-23T12:00:00');
+    expect(findNode(mounted.root, 'draft-merchant-0').value).toBe('');
+    expect(select.selectedIndex).toBe(0);
+    expect(change.mock.lastCall).toEqual([recordId, null, null]);
+    expect(visibleText(mounted.root)).not.toContain(error!);
 
     for (const formattedAmount of ['33.00', '32.50']) {
       const input = findNode(mounted.root, 'draft-amount-0');
