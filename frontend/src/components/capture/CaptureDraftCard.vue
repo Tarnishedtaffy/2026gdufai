@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, type Ref } from 'vue';
 import type { CaptureDraft, CaptureSnapshot } from '@gduf/capture-flow';
 import { normalizeIsoOffset, fmtDateTime } from '../../utils/datetime';
 import { parseCaptureEdit, type CaptureEditableField } from './capture-form';
@@ -15,12 +15,45 @@ const fieldErrors = ref<Partial<Record<CaptureEditableField, string>>>({});
 const statusText = { confirmed: '已入库', pending_followup: '待追问', duplicate: '已记过，沿用原账单', rejected: '已放弃处理' };
 const editable = computed(() => !props.locked && (!props.row.result || props.row.result.status === 'pending_followup'));
 
-watch([() => props.row.record.recordId, () => props.row.result?.status, () => props.row.result?.transactionId], () => {
-  const record = props.row.record;
-  amount.value = record.amount === null ? '' : String(record.amount);
-  merchant.value = record.merchant ?? '';
-  occurredAt.value = normalizeIsoOffset(record.occurredAt)?.slice(0, 19) ?? '';
-  direction.value = record.direction;
+/** 已核对的外部补丁替换该字段的无效输入，其他字段的校验错误继续阻止确认。 */
+function syncField<T extends string | null>(
+  field: CaptureEditableField,
+  input: Ref<T>,
+  value: CaptureDraft[CaptureEditableField],
+  formatted: T,
+  reset: boolean,
+): void {
+  if (fieldErrors.value[field]) {
+    delete fieldErrors.value[field];
+    error.value = Object.values(fieldErrors.value)[0] ?? null;
+    emit('change', props.row.record.recordId, null, error.value);
+    input.value = formatted;
+  } else if (reset || parseCaptureEdit(field, input.value).patch?.[field] !== value) {
+    input.value = formatted;
+  }
+}
+
+watch([
+  () => props.row.record.recordId,
+  () => props.row.record.amount,
+  () => props.row.record.merchant,
+  () => normalizeIsoOffset(props.row.record.occurredAt),
+  () => props.row.record.direction,
+], ([id, nextAmount, nextMerchant, nextTime, nextDirection], previous) => {
+  const reset = id !== previous?.[0];
+  if (reset) { fieldErrors.value = {}; error.value = null; }
+  if (reset || nextAmount !== previous[1]) {
+    syncField('amount', amount, nextAmount, nextAmount === null ? '' : String(nextAmount), reset);
+  }
+  if (reset || nextMerchant !== previous[2]) {
+    syncField('merchant', merchant, nextMerchant, nextMerchant ?? '', reset);
+  }
+  if (reset || nextTime !== previous[3]) {
+    syncField('occurredAt', occurredAt, nextTime, nextTime?.slice(0, 19) ?? '', reset);
+  }
+  if (reset || nextDirection !== previous[4]) {
+    syncField('direction', direction, nextDirection, nextDirection, reset);
+  }
 }, { immediate: true });
 
 /** 表单格式错误时阻止确认；空字段仍保留 null，业务判断由 M2 完成。 */
