@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue';
 import type { CaptureDraft, CaptureSnapshot } from '@gduf/capture-flow';
-import { recognize, recognizeFollowup } from '../../api/capture';
+import { recognize, recognizeFollowup, uploadCaptureFile, type UploadedCapture } from '../../api/capture';
 
 const props = defineProps<{ row?: CaptureSnapshot['records'][number]; disabled: boolean }>();
 const emit = defineEmits<{
@@ -13,13 +13,19 @@ const file = ref<File | null>(null);
 const loading = ref(false);
 const error = ref('');
 let active: AbortController | undefined;
+let uploaded: UploadedCapture | null = null;
 function cancel() { active?.abort(); active = undefined; loading.value = false; }
 onBeforeUnmount(cancel);
 watch(() => [props.row, props.disabled], cancel, { flush: 'sync' });
-function select(event: Event) { file.value = (event.target as HTMLInputElement).files?.[0] ?? null; }
+function select(event: Event) {
+  cancel();
+  uploaded = null;
+  error.value = '';
+  file.value = (event.target as HTMLInputElement).files?.[0] ?? null;
+}
 
 async function run() {
-  if (props.disabled || loading.value) return;
+  if (props.disabled || loading.value || (!file.value && !text.value.trim())) return;
   const controller = new AbortController();
   active = controller;
   loading.value = true;
@@ -30,11 +36,21 @@ async function run() {
       const patch = await recognizeFollowup(row.record, text.value.trim(), row.result?.feedback ?? [], controller.signal);
       if (!controller.signal.aborted) { emit('patch', row.record.recordId, patch); text.value = ''; }
     } else {
-      const drafts = await recognize(file.value ?? text.value.trim(), controller.signal);
+      if (file.value && !uploaded) {
+        const source = await uploadCaptureFile(file.value, controller.signal);
+        if (controller.signal.aborted) return;
+        uploaded = source;
+      }
+      const drafts = await recognize(uploaded ?? text.value.trim(), controller.signal);
       if (!controller.signal.aborted) emit('drafts', drafts);
     }
   } catch (cause) {
-    if (!controller.signal.aborted) error.value = cause instanceof Error ? cause.message : '识别失败，请重试。';
+    if (controller.signal.aborted) return;
+    if (cause instanceof Error && 'code' in cause && cause.code === 'INVALID_CAPTURE_INPUT' &&
+        'field' in cause && cause.field === 'sourceRef') {
+      uploaded = null;
+    }
+    error.value = cause instanceof Error ? cause.message : '识别失败，请重试。';
   } finally {
     if (active === controller) { active = undefined; loading.value = false; }
   }

@@ -47,3 +47,33 @@ it('追问只传草稿和反馈，补丁不能改写幂等键', async () => {
   await expect(recognizeFollowup(row.record,'15元',[],new AbortController().signal)).rejects.toThrow('无效的追问补丁');
   expect(flow.getSnapshot().records[0]).toEqual(row);
 });
+
+it('抽取服务暂时失败时，使用已有文件引用重试而不是再次上传', async () => {
+  const sourceRef = 'uploads/2026/11/550e8400-e29b-41d4-a716-446655440000.png';
+  const draft = { rawText: '虚构记录', modality: 'image', sourceRef, amount: null, merchant: null, occurredAt: null, direction: null, confidence: null };
+  let attempts = 0;
+  const client = vi.fn(async (path: string, init: RequestInit) => {
+    if (path.endsWith('/uploads')) return Response.json({ sourceRef, modality: 'image' });
+    expect(JSON.parse(String(init.body)).sourceRef).toBe(sourceRef);
+    if (++attempts === 1) {
+      return Response.json({ error: { code: 'AI_UPSTREAM_ERROR', message: '识别服务暂时不可用', field: null } }, { status: 502 });
+    }
+    return Response.json({ drafts: [draft] });
+  });
+  vi.stubGlobal('fetch', client);
+  const received = vi.fn();
+  const ui = mountUi(CaptureRecognizer, { disabled: false, onDrafts: received });
+  try {
+    const input = findNode(ui.root, 'cap-file');
+    Object.assign(input, { files: [new File(['fixture'], 'test.png', { type: 'image/png' })] });
+    await dispatch(input, 'change');
+    const form = allNodes(ui.root).find(node => node.kind === 'form')!;
+    await dispatch(form, 'submit');
+    expect(received).not.toHaveBeenCalled();
+    await dispatch(form, 'submit');
+    expect(received).toHaveBeenCalledWith([draft]);
+    expect(client.mock.calls.map(([url]) => url.split('/').pop())).toEqual(['uploads', 'extract', 'extract']);
+  } finally {
+    ui.unmount();
+  }
+});

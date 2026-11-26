@@ -8,28 +8,34 @@ function extract<T>(input: object, signal: AbortSignal): Promise<T> {
   });
 }
 
-/** 上传成功后仅将服务端返回的文件引用传给抽取接口。 */
-export async function recognize(input: string | File, signal: AbortSignal): Promise<CaptureDraft[]> {
-  let source: { modality: CaptureDraft['modality']; sourceRef: string | null; rawText?: string };
-  if (typeof input === 'string') {
-    source = { modality: 'text', rawText: input, sourceRef: null };
-  } else {
-    const form = new FormData();
-    form.append('file', input);
-    const upload = await request<{ modality: string; sourceRef: string }>('/api/capture/uploads', {
-      method: 'POST', body: form, signal,
-    });
-    if (!['image', 'voice'].includes(upload.modality) || typeof upload.sourceRef !== 'string' || !upload.sourceRef) {
-      throw new Error('上传服务未返回有效的文件引用。');
-    }
-    source = { modality: upload.modality as 'image' | 'voice', sourceRef: upload.sourceRef };
+export interface UploadedCapture {
+  modality: 'image' | 'voice';
+  sourceRef: string;
+}
+
+/** 上传成功后保留受控引用，让抽取失败可以单独重试。 */
+export async function uploadCaptureFile(file: File, signal: AbortSignal): Promise<UploadedCapture> {
+  const form = new FormData();
+  form.append('file', file);
+  const { modality, sourceRef } = await request<Partial<UploadedCapture>>('/api/capture/uploads', {
+    method: 'POST', body: form, signal,
+  });
+  if ((modality !== 'image' && modality !== 'voice') || typeof sourceRef !== 'string' || !sourceRef.trim()) {
+    throw new Error('上传服务未返回有效的文件引用。');
   }
+  return { modality, sourceRef };
+}
+
+/** 文件抽取只使用上传接口返回的引用。 */
+export async function recognize(input: string | UploadedCapture, signal: AbortSignal): Promise<CaptureDraft[]> {
+  const source = typeof input === 'string' ? { modality: 'text', rawText: input, sourceRef: null } : input;
   const { drafts } = await extract<{ drafts: CaptureDraft[] }>({ mode: 'draft', ...source }, signal);
   if (!Array.isArray(drafts) || !drafts.length || drafts.some(d => d?.modality !== source.modality || d.sourceRef !== source.sourceRef)) {
     throw new Error('识别结果为空或与原始来源不一致。');
   }
   return drafts;
 }
+
 
 /** 只传草稿八字段及当前反馈，返回值交给共享流程再次校验。 */
 export async function recognizeFollowup(record: CaptureDraft, followupText: string, pendingFeedback: CaptureFeedback[], signal: AbortSignal) {
