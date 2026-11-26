@@ -63,6 +63,9 @@ export function mockListTransactions(query: TransactionQuery): TransactionListRe
     if (query.to && tx.occurredDate > query.to) {
       continue;
     }
+    if (entryType !== 'all' && (tx.entryType ?? 'normal') !== entryType) {
+      continue;
+    }
     if ((tx.entryType ?? 'normal') === 'normal') {
       summaryCount += 1;
       if (tx.direction === 'expense') {
@@ -70,9 +73,6 @@ export function mockListTransactions(query: TransactionQuery): TransactionListRe
       } else {
         summaryIncomeCents += tx.amountCents;
       }
-    }
-    if (entryType !== 'all' && (tx.entryType ?? 'normal') !== entryType) {
-      continue;
     }
     filtered.push(tx);
   }

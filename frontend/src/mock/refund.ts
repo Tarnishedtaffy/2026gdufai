@@ -93,13 +93,14 @@ export function evaluateRefund(record: ImportRecord, amount: number, occurredAt:
     (original.entryType ?? 'normal') === 'normal' &&
     Date.parse(original.occurredAt) <= Date.now();
 
-  if (!originalUsable) {
-    if (round < 1) {
+  const settled = originalUsable && original.settledAt != null;
+  if (!originalUsable || settled) {
+    if (round < 1 || settled) {
       followupRoundByKey.set(record.idempotencyKey, round + 1);
-      const code = record.originalTransactionId ? 'ORIGINAL_NOT_FOUND' : 'MISSING_ORIGINAL_TRANSACTION';
+      const code = settled ? 'ORIGINAL_ALREADY_SETTLED' : record.originalTransactionId ? 'ORIGINAL_NOT_FOUND' : 'MISSING_ORIGINAL_TRANSACTION';
       return {
         recordId: record.recordId,
-        status: 'pending_followup',
+        status: round >= 2 ? 'rejected' : 'pending_followup',
         transactionId: null,
         direction: 'income',
         occurredAt,

@@ -321,7 +321,7 @@
 
 - `summary` 是**整个筛选集**的合计，不是本页；
 - `summary` **恒只统计 `entry_type='normal'` 且满足 `entryType` 筛选**的记录，中性记录只出现在 `items` 中；因此 `entryType=all` 或 `entryType=refund` 时，`summary.count` 可能与 `items` 条数不一致，金额字段也不含中性记录。
-- `matchedTransactionId`（v1.6 新增）：退款/还款记录（`entryType` 为 `refund`/`repayment`）匹配到的原账单 id，与 §1.4 入站回执的 `matchedTransactionId` 语义一致；`normal` 记录或未匹配原账单的中性记录为 `null`。
+- `matchedTransactionId`（v1.6 新增）：退款/还款记录（`entryType` 为 `refund`/`repayment`）匹配到的原账单 id，与 §1.4 入站回执的 `matchedTransactionId` 语义一致；派生的普通收支记录（如超额退款收入）如果已关联原单，同样返回该 id。没有关联时返回 `null`。
 - 游标分页：把 `nextCursor` 原样回传，不要自己拼 `offset`。
 
 ### 2.4 类别字典 `GET /api/categories`

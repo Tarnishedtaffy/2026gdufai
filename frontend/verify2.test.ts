@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mockImportBatch } from './src/mock/import';
 import { mockGetStats } from './src/mock/stats';
-import { mockListTransactions, mockGetBudgets, mockGetCategories } from './src/mock/db';
+import { getMockTransactions, mockListTransactions, mockGetBudgets, mockGetCategories } from './src/mock/db';
 import type { ImportRecord, FeedbackCode } from './src/types/contract';
 import { contractFeedbackCodes } from './test-support/feedback-contract';
 
@@ -96,4 +96,25 @@ describe('N5-N8', () => {
     const r = (await mockImportBatch(batch('i1', 'k-income', { direction: 'income' }))).results[0];
     console.log('N8 收入类别=', JSON.stringify(r.category));
   });
+});
+
+it.each(['refund', 'repayment'] as const)('中性筛选 %s 的汇总为零', entryType => {
+  expect(mockListTransactions({entryType}).summary).toEqual({count: 0, expenseCents: 0, incomeCents: 0});
+});
+
+it('已结清原单退款持续追问直至拒绝，原单及条数不变', async () => {
+  const rows = getMockTransactions();
+  const original = rows.find(x => x.status === 'confirmed' && (x.entryType ?? 'normal') === 'normal')!;
+  const previous = original.settledAt;
+  original.settledAt = original.occurredAt;
+  const before = { ...original };
+  const count = rows.length;
+  try {
+    for (const status of ['pending_followup', 'pending_followup', 'rejected']) {
+      const result = await mockImportBatch(batch('settled', 'settled-key', { rawText: '退款 30 元', originalTransactionId: original.id }));
+      expect(result.results[0]).toMatchObject({ status, transactionId: null, feedback: [{code: 'ORIGINAL_ALREADY_SETTLED'}] });
+    }
+    expect(original).toEqual(before);
+    expect(rows).toHaveLength(count);
+  } finally { original.settledAt = previous; }
 });
