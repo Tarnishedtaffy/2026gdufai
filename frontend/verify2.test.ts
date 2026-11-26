@@ -118,3 +118,11 @@ it('已结清原单退款持续追问直至拒绝，原单及条数不变', asyn
     expect(rows).toHaveLength(count);
   } finally { original.settledAt = previous; }
 });
+
+it('仅有退款时有记录、收支为零；相反方向的筛选结果为空', () => {
+  const query = { dimension: 'day' as const, date: '2026-11-14' };
+  const income = mockGetStats({ ...query, direction: 'income' });
+  expect(income.meta.isEmpty).toBe(false);
+  expect(income.summary).toMatchObject({count: 0, expenseCents: 0, incomeCents: 0});
+  expect(mockGetStats({ ...query, direction: 'expense' }).meta.isEmpty).toBe(true);
+});
