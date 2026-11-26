@@ -7,7 +7,7 @@ interface Question { query: StatsQuery; metric: Metric; label: string }
 const aliases: Record<string, string> = { 吃饭: '餐饮', 打车: '交通', 坐车: '交通', 看病: '医疗' };
 const intents: [RegExp, Metric][] = [
   [/^(?:哪类花得最多|哪一类支出最多|最大支出类别)$/, 'top'],
-  [/^(?:项目收支净额|收支净额|净收支)(?:是多少|多少)?$/, 'net'],
+  [/(?:项目收支净额|收支净额|净收支)(?:是多少|多少)?$/, 'net'],
   [/(?:有几笔|有多少笔|共几笔)$/, 'count'],
   [/(?:收入了多少|收入多少|收入是多少|赚了多少)(?:钱|元)?$/, 'income'],
   [/(?:花了多少|花费多少|支出了多少|支出多少|支出是多少)(?:钱|元)?$/, 'expense'],
@@ -38,11 +38,18 @@ export function parseQuestion(question: string, categories: readonly CategoryIte
   if (!found) throw new Error('可以查支出、收入、净收支、笔数或支出最多的类别，请换个问法。');
   const [pattern, metric] = found;
   const name = subject.replace(pattern, '').replace(/的$/, '');
-  const category = name ? categories.find(c => c.name === name) ?? categories.find(c => c.name === aliases[name]) : undefined;
-  if (name && !category) throw new Error(`类别列表中没有“${name}”，请核对类别名称。`);
   const direction = metric === 'top' ? 'expense' : metric === 'expense' || metric === 'income' ? metric : 'all';
-  if (category && direction !== 'all' && category.kind !== direction) throw new Error('这个类别与所问的收支方向不符，请核对。');
-  return { metric, label: time + (category?.name ?? ''), query: { ...period(time, today), direction, ...(category && { categoryIds: [category.id] }) } };
+  const exactMatches = name ? categories.filter(category => category.name === name) : [];
+  const matches = exactMatches.length ? exactMatches : categories.filter(category => category.name === aliases[name]);
+  if (name && !matches.length) throw new Error(`类别列表中没有“${name}”，请核对类别名称。`);
+  const selected = matches.filter(category => direction === 'all' || category.kind === direction);
+  if (matches.length && !selected.length) throw new Error('这个类别与所问的收支方向不符，请核对。');
+  const categoryIds = selected.length ? selected.map(category => category.id) : undefined;
+  return {
+    metric,
+    label: time + (selected[0]?.name ?? ''),
+    query: { ...period(time, today), direction, ...(categoryIds && { categoryIds }) },
+  };
 }
 
 /** 所有数值均来自统计回执，金额单位只在展示时换算。 */

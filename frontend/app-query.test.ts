@@ -50,3 +50,15 @@ it('通过网页提交问句并向真实模式的统计客户端传递类别和�
     vi.unstubAllEnvs();
   }
 });
+
+it('同名的收入和支出类别按方向选择，收支净额纳入两侧', () => {
+  const categories = [
+    { ...MOCK_CATEGORIES[8], name: '报销', id: 81, kind: 'income' as const },
+    { ...MOCK_CATEGORIES[0], name: '报销', id: 82, kind: 'expense' as const },
+  ];
+  const parse = (question: string) => parseQuestion(question, categories, '2026-11-26');
+  expect(parse('本月报销花了多少').query.categoryIds).toEqual([82]);
+  expect(parse('本月报销收入多少').query.categoryIds).toEqual([81]);
+  expect(parse('本月报销净收支多少').query.categoryIds).toEqual([81, 82]);
+  expect(parse('本月报销有几笔').query.categoryIds).toEqual([81, 82]);
+});
