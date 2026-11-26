@@ -6,6 +6,7 @@ import { recognize, recognizeFollowup, uploadCaptureFile, type UploadedCapture }
 const props = defineProps<{ row?: CaptureSnapshot['records'][number]; disabled: boolean }>();
 const emit = defineEmits<{
   drafts: [drafts: CaptureDraft[]];
+  working: [working: boolean];
   patch: [id: string, patch: Partial<CaptureDraft>];
 }>();
 const text = ref('');
@@ -15,6 +16,7 @@ const error = ref('');
 let active: AbortController | undefined;
 let uploaded: UploadedCapture | null = null;
 function cancel() { active?.abort(); active = undefined; loading.value = false; }
+watch(loading, working => emit('working', working), { flush: 'sync' });
 onBeforeUnmount(cancel);
 watch(() => [props.row, props.disabled], cancel, { flush: 'sync' });
 function select(event: Event) {

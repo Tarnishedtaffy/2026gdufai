@@ -18,6 +18,8 @@ const occurredAtInput = ref('');
 const direction = ref<CaptureDraft['direction']>(null);
 const formError = ref<string | null>(null);
 const invalidRows = ref<Record<string, string>>({});
+const activeFollowupId = ref<string | null>(null);
+const recognizingFollowup = computed(() => activeFollowupId.value !== null);
 const discardRequested = ref(false);
 const discardAcknowledged = ref(false);
 const busy = computed(() => snapshot.value.phase === 'submitting');
@@ -59,7 +61,19 @@ function prepareSamples(): void {
   ]);
 }
 
+function setFollowupWorking(recordId: string, working: boolean): void {
+  if (working) activeFollowupId.value = recordId;
+  else if (activeFollowupId.value === recordId) activeFollowupId.value = null;
+}
+
+async function confirmDrafts(): Promise<void> {
+  // 识别回执应用前重发会把旧字段送给 M2，并消耗一次追问机会。
+  if (recognizingFollowup.value) return;
+  await confirm();
+}
+
 function edit(recordId: string, patch: Partial<CaptureDraft> | null, error: string | null): void {
+  if (recognizingFollowup.value) return;
   const errors = { ...invalidRows.value };
   if (error) errors[recordId] = error; else delete errors[recordId];
   if (patch && !update(recordId, patch)) errors[recordId] = inputError.value ?? '请核对字段。';
@@ -111,8 +125,9 @@ defineExpose({ acceptDrafts });
       <p v-if="snapshot.phase === 'draft'" class="hint">请核对以下 {{ snapshot.records.length }} 条草稿。点击确认之前不会提交。</p>
       <p v-if="snapshot.phase === 'pending_followup'" class="hint">请补充对应记录；已完成的记录不会重复提交。</p>
       <template v-for="(row, index) in snapshot.records" :key="row.record.recordId">
-        <CaptureDraftCard :row="row" :index="index" :locked="busy || retrying" @change="edit" />
-        <CaptureRecognizer v-if="!isMock && snapshot.phase === 'pending_followup' && row.result?.status === 'pending_followup'" :row="row" :disabled="!canPrepare" @patch="update" />
+        <CaptureDraftCard :row="row" :index="index" :locked="busy || retrying || recognizingFollowup" @change="edit" />
+        <CaptureRecognizer v-if="!isMock && snapshot.phase === 'pending_followup' && row.result?.status === 'pending_followup'" :row="row" :disabled="!canPrepare || (recognizingFollowup && activeFollowupId !== row.record.recordId)"
+          @working="setFollowupWorking(row.record.recordId, $event)" @patch="update" />
       </template>
       <div v-if="snapshot.error" class="alert" role="alert">{{ snapshot.error }}。可修正访问令牌后重试原提交；原草稿暂不能修改。</div>
       <div v-if="retrying" class="alert" role="alert">
@@ -127,8 +142,8 @@ defineExpose({ acceptDrafts });
         </template>
       </div>
       <div class="actions">
-        <button v-if="snapshot.phase !== 'complete'" class="primary" type="button" :disabled="busy || !canPrepare || Object.keys(invalidRows).length > 0" @click="confirm">
-          {{ busy ? '提交中…' : retrying ? '重试原提交' : snapshot.phase === 'pending_followup' ? `确认补充并重发 ${pendingCount} 条` : `确认并提交 ${pendingCount} 条` }}
+        <button v-if="snapshot.phase !== 'complete'" class="primary" type="button" :disabled="busy || recognizingFollowup || !canPrepare || Object.keys(invalidRows).length > 0" @click="confirmDrafts">
+          {{ busy ? '提交中…' : recognizingFollowup ? '等待识别补充说明…' : retrying ? '重试原提交' : snapshot.phase === 'pending_followup' ? `确认补充并重发 ${pendingCount} 条` : `确认并提交 ${pendingCount} 条` }}
         </button>
         <button v-if="snapshot.phase === 'complete' || snapshot.phase === 'draft'" type="button" @click="newEntry">{{ snapshot.phase === 'draft' ? '重新填写' : '新建一笔' }}</button>
       </div>
