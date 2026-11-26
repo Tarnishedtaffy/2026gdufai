@@ -55,7 +55,7 @@ export async function request<T>(path: string, config: RequestConfig = {}): Prom
   const { expectArray = false, ...init } = config;
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
   const headers = new Headers(init.headers);
-  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (!(init.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const token = getAccessToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
   let response: Response;
