@@ -6,6 +6,7 @@ import { isMockEnabled } from '../api/request';
 import { parseDateTime } from '../utils/datetime';
 import { yuanToCents, centsToYuanNumber } from '../utils/money';
 import CaptureDraftCard from '../components/capture/CaptureDraftCard.vue';
+import CaptureRecognizer from '../components/capture/CaptureRecognizer.vue';
 import CaptureAttachmentEntry from '../components/capture/CaptureAttachmentEntry.vue';
 
 const { snapshot, inputError, canPrepare, prepare, update, confirm, discard } = useCaptureFlow();
@@ -91,7 +92,7 @@ defineExpose({ acceptDrafts });
     <p v-if="!canPrepare" class="alert" role="alert">真实记账尚未接入登录会话，暂不能提交。</p>
     <form v-if="showEntry" class="entry" @submit.prevent="prepareManual">
       <h2>准备文字草稿</h2>
-      <p class="hint">可先手工填写或载入虚构示例；图片、语音识别正在接入。</p>
+      <p class="hint">可手工填写并核对字段，也可载入虚构示例。</p>
       <label for="cap-raw">原始文本<input id="cap-raw" v-model="rawText" placeholder="例如：午饭麻辣烫 24.5 元" /></label>
       <div class="fields">
         <label for="cap-dir">收支方向<select id="cap-dir" v-model="direction"><option :value="null">未知</option><option value="expense">支出</option><option value="income">收入</option></select></label>
@@ -102,11 +103,17 @@ defineExpose({ acceptDrafts });
       <p v-if="formError" class="alert" role="alert">{{ formError }}</p>
       <div class="actions"><button type="submit" class="primary" :disabled="!canPrepare">生成待确认草稿</button><button type="button" :disabled="!canPrepare" @click="prepareSamples">载入两条虚构示例</button></div>
     </form>
-    <CaptureAttachmentEntry v-if="showEntry" />
+    <template v-if="showEntry">
+      <CaptureAttachmentEntry v-if="isMock" />
+      <CaptureRecognizer v-else :disabled="!canPrepare" @drafts="acceptDrafts" />
+    </template>
     <template v-else>
       <p v-if="snapshot.phase === 'draft'" class="hint">请核对以下 {{ snapshot.records.length }} 条草稿。点击确认之前不会提交。</p>
       <p v-if="snapshot.phase === 'pending_followup'" class="hint">请补充对应记录；已完成的记录不会重复提交。</p>
-      <CaptureDraftCard v-for="(row, index) in snapshot.records" :key="row.record.recordId" :row="row" :index="index" :locked="busy || retrying" @change="edit" />
+      <template v-for="(row, index) in snapshot.records" :key="row.record.recordId">
+        <CaptureDraftCard :row="row" :index="index" :locked="busy || retrying" @change="edit" />
+        <CaptureRecognizer v-if="!isMock && snapshot.phase === 'pending_followup' && row.result?.status === 'pending_followup'" :row="row" :disabled="!canPrepare" @patch="update" />
+      </template>
       <div v-if="snapshot.error" class="alert" role="alert">{{ snapshot.error }}。可修正访问令牌后重试原提交；原草稿暂不能修改。</div>
       <div v-if="retrying" class="alert" role="alert">
         <strong>服务端可能已入库，请先到账单一览核对。</strong>

@@ -30,7 +30,7 @@ it('API stub 验证 App 身份、401 令牌修正后原批次重试及图片/语
     const attachment = findNode(mounted.root, 'cap-file');
     Object.assign(attachment, { files: [{ name: 'local-receipt.png', type: 'image/png' }] });
     await dispatch(attachment, 'change');
-    expect(visibleText(mounted.root)).toContain('local-receipt.png（尚未识别）');
+    expect(visibleText(mounted.root)).toContain('local-receipt.png（待识别）');
     expect(client).not.toHaveBeenCalled();
     mounted.view.value!.acceptDrafts([{ rawText: '演示午饭 24.5 元', amount: 24.5, merchant: '演示商户',
       direction: 'expense', occurredAt: '2026-11-17T12:00:00+08:00', modality: 'text', sourceRef: null, confidence: null }]);
