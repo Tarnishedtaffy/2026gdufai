@@ -336,10 +336,15 @@
 
 ```jsonc
 [ { "id": 1, "scope": "total", "category": null, "amountCents": 300000,
-    "spentCents": 268400, "remainingCents": 31600, "usageRatio": 0.895, "level": "near" } ]
+    "spentCents": 268400, "remainingCents": 31600, "usageRatio": 0.895, "level": "near",
+    "alertThresholds": [80, 100] } ]
 ```
 
-`level`：`normal` / `near`（≥80%）/ `over`（≥100%）。
+- `level`：`normal` / `near`（≥80%）/ `over`（≥100%）；
+- `category` 统一为 `{ "id": 1, "name": "餐饮" }` 或 `null`；`scope=total` 时必为 `null`，且不返回 `kind`/`color`/`icon`；
+- `spentCents` 只统计 `direction='expense'`、`entry_type='normal'`、`status='confirmed'` 的账单，按 `occurred_date` 的 `Asia/Shanghai` 自然月聚合；
+- `remainingCents = amountCents - spentCents`，允许为负；
+- `alertThresholds` 为该预算已保存的阈值，去重升序；空数组表示关闭该预算的提醒；该字段随 `GET`/`PUT` 返回，便于前端回显。
 
 ### 2.6 错误格式
 
@@ -354,9 +359,9 @@
 | `INVALID_QUERY_PARAM` | 422 | 查询参数非法（分页、筛选、游标等） |
 | `CATEGORY_NOT_FOUND` | 404 | 类别不存在 |
 | `CATEGORY_IN_USE` | 409 | 删除有数据的类别，返回 `counts` |
-| `TRANSACTION_NOT_FOUND` | 404 | 账单不存在 |
+| `TRANSACTION_NOT_FOUND` | 404 | 账单不存在，`field` 为 `id` |
 | `CATEGORY_NAME_TAKEN` | 409 | 同一 `kind` 下类别重名 |
-| `CATEGORY_PRESET_PROTECTED` | 403 | 尝试删除预设类别 |
+| `CATEGORY_PRESET_PROTECTED` | 403 | 尝试删除或迁移预设类别 |
 | `CATEGORY_KIND_MISMATCH` | 409 | 迁移类别（`reassign`）时，目标类别 `kind` 与账单 `direction` 不一致 |
 | `BUDGET_NOT_FOUND` | 404 | 预算不存在 |
 | `BUDGET_CONFLICT` | 409 | 迁移预算时目标类别同月已有预算，`details` 返回冲突双方预算 id |
@@ -404,14 +409,14 @@ DELETE /api/categories/14
                     "details": { "counts": { "transactions": 10, "budgets": 1, "rules": 3 } } } }
 
 // 迁移：账单、预算、学习规则一起迁到目标类别
-POST /api/categories/13/reassign
+POST /api/categories/14/reassign
 { "targetCategoryId": 5 }
 → 200 { "targetCategoryId": 5, "movedTransactions": 12, "movedBudgets": 1, "movedRules": 3 }
 ```
 
 规则：
 
-- 预设类别（`isPreset=true`）只能停用，删除返回 `403 CATEGORY_PRESET_PROTECTED`；
+- 预设类别（`isPreset=true`）只能停用，删除或作为 `POST /reassign` 的源均返回 `403 CATEGORY_PRESET_PROTECTED`；
 - 同一 `kind` 下类别名唯一，重名返回 `409 CATEGORY_NAME_TAKEN`；
 - `PATCH` 不允许修改 `kind`：`kind` 创建后不可变，传入返回 `422 INVALID_QUERY_PARAM`（`field: kind`）；
 - 删除前统计三类引用：`counts.transactions` **包含 `status='void'` 的已作废账单**（作废只改状态，仍保留 `category_id` 引用）；`counts.budgets`、`counts.rules` 同样统计全部引用；
@@ -439,7 +444,7 @@ PUT /api/budgets
   "amountCents": 100000, "alertThresholds": [80, 100] }
 → 200 { "id": 7, "scope": "category", "category": { "id": 1, "name": "餐饮" },
         "amountCents": 100000, "spentCents": 98000, "remainingCents": 2000,
-        "usageRatio": 0.98, "level": "near" }
+        "usageRatio": 0.98, "level": "near", "alertThresholds": [80, 100] }
 
 DELETE /api/budgets/7
 → 204
@@ -447,11 +452,15 @@ DELETE /api/budgets/7
 
 规则：
 
+- `GET` / `PUT` 的响应顶层都包含上例全部字段，`id` 供 `DELETE` 使用；
 - `scope=total` 时 `categoryId` 必须为 `null`；`scope=category` 必须提供 `categoryId`，否则 `422 INVALID_QUERY_PARAM`；
+- `scope=category` 时目标类别必须存在且 `kind='expense'`；不存在返回 `404 CATEGORY_NOT_FOUND`，收入类别返回 `422 INVALID_QUERY_PARAM`（`field: categoryId`）；
 - `amountCents` 必须是**正整数**（单位分，且 > 0），非法返回 `422 INVALID_QUERY_PARAM`（`field: amountCents`）；
-- `alertThresholds` 为 **1–200 的整数数组**，去重后升序存储，最多 5 个，缺省 `[80, 100]`；越界、非整数或超过 5 个返回 `422 INVALID_QUERY_PARAM`（`field: alertThresholds`）。该范围与 `budget_alerts.threshold` 的 `CHECK (BETWEEN 1 AND 200)` 保持一致；
+- `alertThresholds` 为 **1–200 的整数数组**，去重后升序存储，最多 5 个，缺省 `[80, 100]`；**空数组表示关闭该预算的提醒**（不写入任何告警）；越界、非整数或超过 5 个返回 `422 INVALID_QUERY_PARAM`（`field: alertThresholds`）。该范围与 `budget_alerts.threshold` 的 `CHECK (BETWEEN 1 AND 200)` 保持一致；
 - 同一 `(month, scope, categoryId)` 幂等覆盖，不产生重复预算，响应始终包含预算 `id`，供 `DELETE /api/budgets/:id` 使用；
-- 删除不存在的预算返回 `404 BUDGET_NOT_FOUND`；删除成功返回 `204` 无响应体。
+- 删除不存在的预算返回 `404 BUDGET_NOT_FOUND`；删除成功返回 `204` 无响应体；
+- 预算读写接口不使用 `409`；`BUDGET_CONFLICT` 只用于类别迁移（§2.7）的目标同月预算冲突；
+- 本期不提供告警查询端点；告警由 `PUT /api/budgets` 触发；M2 账单写操作接入（#38）后，由 `recalcBudgetForTransaction` / `recalcBudgetsForMonth` 在账单写入/变更后触发，写入 `budget_alerts` 供后续通知模块消费。
 
 ## 2.9 账单纠错
 
@@ -491,7 +500,7 @@ POST /api/transactions/tx_xxx/void
 - 作废原贷款：关联还款与利息记录保留，但不再参与剩余本金计算；
 - `void` 幂等：重复调用返回 `200` 与当前 `status='void'`，不重复写入学习规则；
 - `occurredAt` 目前允许未来时间是有意为之（与导入路径的 `FUTURE_TIME` 校验区分），便于用户补录计划内账单；
-- 修改分类时写入 `user_category_rules`（下次同商户自动命中）；只有类别实际变化时才写入并递增 `hit_count`，改到另一侧 `kind` 时翻转 `direction` 并重算当月预算；作废后该账单从统计与预算中排除，但记录保留。
+- 修改分类时写入 `user_category_rules`（下次同商户自动命中）；只有类别实际变化时才写入并递增 `hit_count`，同时把 `category_source` 置为 `manual`、`category_confidence` 置为 `NULL`；改到另一侧 `kind` 时翻转 `direction`、把 `direction_source` 置为 `category` 并重算当月预算；作废后该账单从统计与预算中排除，但记录保留。
 
 ---
 
@@ -578,7 +587,7 @@ POST /api/transactions/tx_xxx/void
    - v1.2：`occurredAt` 要求真实日历日期，拒绝 `2026-02-31` 这类 V8 会静默滚动的输入；
    - v1.3：退款/还款改为中性记录（`entry_type`），保留但不计入收支；移除 `REFUND_NOT_SUPPORTED`，新增 5 个反馈码；`summary` 恒只统计 normal，`meta.isEmpty` 依据区间是否有任何记录；
    - v1.4：退款/还款按金额三态——等额作废原单，少于原单调整原单金额，超出部分记收入（退款）/支出（还款）；新增 `ORIGINAL_AMOUNT_ADJUSTED`、`REFUND_EXCESS_AS_INCOME`、`REPAYMENT_EXCESS_AS_EXPENSE` 三个反馈码。
-   - v1.5：新增预设类别 13「贷款利息」（自定义从 14 起）、入站 `repaymentPart` / `principalCents` / `interestCents`、`settled_at` 结清标记；贷款还款改为保留原单并标记结清（2C），显式原单匹配取消 30 天上限（1D）；新增 `ORIGINAL_TRANSACTION_AGED`、`PARTIAL_REPAYMENT_RECORDED`、`AMBIGUOUS_LOAN_PAYMENT`、`ORIGINAL_ALREADY_SETTLED`；明确现金流口径。
+   - v1.5：新增预设类别 13「贷款利息」（自定义从 14 起）、入站 `repaymentPart` / `principalCents` / `interestCents`、`settled_at` 结清标记；贷款还款改为保留原单并标记结清（2C），显式原单匹配取消 30 天上限（1D）；新增 `ORIGINAL_TRANSACTION_AGED`、`PARTIAL_REPAYMENT_RECORDED`、`AMBIGUOUS_LOAN_PAYMENT`、`ORIGINAL_ALREADY_SETTLED`；明确现金流口径；升级迁移会把任意 id 的同名自定义「贷款利息」重命名为「贷款利息(旧N)」，并同步迁移其账单、预算与学习规则引用。
 2. 模块 2 的实现在 `backend/` 下，接口以本文档为准；代码合并后如有差异，以代码为准并同步更新本文档。
 3. 模块 1 / 3 需要新增字段或接口（比如「按商户统计」），先在群里提，确认后由模块 2 加，**不要各自约定后直接改**。
 4. 联调问题优先带三样东西：`batchId` / `recordId` / 接口返回原文，方便直接查 `intake_log`。

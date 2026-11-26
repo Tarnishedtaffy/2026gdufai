@@ -172,7 +172,7 @@ export function patchTransaction(
     const values: Array<string | number | null> = [];
 
     if (changedCategory) {
-      assignments.push('category_id = ?', "category_source = 'manual'");
+      assignments.push('category_id = ?', "category_source = 'manual'", 'category_confidence = NULL');
       values.push(categoryId);
       if (direction !== current.direction) {
         assignments.push('direction = ?', "direction_source = 'category'");

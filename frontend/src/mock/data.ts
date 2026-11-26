@@ -108,6 +108,7 @@ export const MOCK_TRANSACTIONS: TransactionItem[] = [
 export const MOCK_BUDGETS_BY_MONTH: Record<string, BudgetItem[]> = {
   '2026-11': [
     {
+      id: 1,
       scope: 'total',
       category: null,
       amountCents: 150000,
@@ -115,24 +116,29 @@ export const MOCK_BUDGETS_BY_MONTH: Record<string, BudgetItem[]> = {
       remainingCents: 117650,
       usageRatio: 0.2157,
       level: 'normal',
+      alertThresholds: [80, 100],
     },
     {
+      id: 2,
       scope: 'category',
-      category: { id: 1, name: '餐饮', color: '#F97316', icon: 'utensils' },
+      category: { id: 1, name: '餐饮' },
       amountCents: 8000,
       spentCents: 6250,
       remainingCents: 1750,
       usageRatio: 0.7813,
       level: 'near',
+      alertThresholds: [80, 100],
     },
     {
+      id: 3,
       scope: 'category',
-      category: { id: 3, name: '购物', color: '#EC4899', icon: 'bag' },
+      category: { id: 3, name: '购物' },
       amountCents: 15000,
       spentCents: 16800,
       remainingCents: -1800,
       usageRatio: 1.12,
       level: 'over',
+      alertThresholds: [80, 100],
     },
   ],
 };

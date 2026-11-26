@@ -654,3 +654,38 @@ ejected；
 - **验证**：backend `typecheck` / `lint` 通过；`test` 23 文件 **205 例**通过（transaction-edit 20 例）
 - **人工审核**：待 #33 复审
 - **遗留问题**：#32 合并后 rebase #33，同步 §2.9 过渡口径，修正 #34 章节与 PR 描述，再补契约相关测试
+
+### LOG-Z_Wen-20261123-01
+
+- **时间**：2026-11-23 16:55（+08:00）
+- **工具/模型**：DeepSeek Harness / deepseek-flash
+- **模块 / 分支 / PR**：M4 / `feat/m4-budgets` / #49（关联 #50）
+- **任务**：实现 M4 预算读写、level 计算与超支告警，并接入前端预算 CRUD
+- **关键提示词**：reviewer hf.md 明确「按本文件直接开工」；M4 后端 + 前端三路径归本组，预算动态聚合、不新增 spent 列、预算 API 不用 409
+- **代理做了什么**：
+  - `backend/src/modules/budget/{types,repository,service,routes,index}.ts`：GET/PUT/DELETE、月/scope/category/金额/阈值校验、动态 spent、level、告警写入与重算函数
+  - `backend/src/app.ts` 注册预算路由
+  - 契约 §2.5/§2.8 补 `alertThresholds`、category 形状、只算 expense+normal+confirmed、无 409
+  - 前端 `BudgetView.vue`/`BudgetForm.vue`/`api/index.ts`/`types/contract.ts`/`mock/{data,db,budget,store}.ts` 支持预算 CRUD 与动态 mock
+  - 测试 `backend/test/m4/{budgets,alerts}.test.ts` 32 例；更新 `frontend/bugtest.test.ts` 预算字段断言
+- **决策**：按 reviewer hf.md 的 B 方案；新模块独立，不改 `ledger/`；动态聚合、不新增迁移；空阈值允许、缺省 [80,100]；告警只增不回收，删除预算级联；#38 跨模块重算留独立 PR
+- **验证**：`pnpm -r typecheck` 全绿；`pnpm -r test` backend 33 文件 339 例、frontend 13 文件 75 例全通过；`pnpm lint` 通过；`git diff --check` 无输出
+- **人工审核**：待 PR #49 复审
+- **遗留问题**：`frontend/src/types/contract.ts` 257 行（按测试统计）仍超 200 行技术债；#38 待 #36/#37/#39/#42 关闭后接入 `recalcBudgetForTransaction`；M4 前端仅改授权三路径
+
+### LOG-Z_Wen-20261123-02
+
+- **时间**：2026-11-23 17:30（+08:00）
+- **工具/模型**：DeepSeek Harness / deepseek-flash
+- **模块 / 分支 / PR**：M4 / `feat/m4-budgets` / #51
+- **任务**：按 reviewer 第二次回复 `REPLY_Z_Wen_20261123_02.md` 处理 P1（空阈值契约口径）与 P2（日志/PR 描述文件范围）
+- **关键提示词**：P1 空数组二选一；P2 日志与 PR 描述列全实际改动文件
+- **代理做了什么**：
+  - 契约 §2.5 / §2.8 明确「空数组表示关闭该预算的提醒」
+  - `backend/test/m4/alerts.test.ts` 增加「空阈值不写告警」用例
+  - 追加本条日志，更正 `LOG-Z_Wen-20261123-01` 中「前端仅改授权三路径」的不准确表述
+  - 更新 PR #51 描述，列全前端实际改动并写明阶段限制
+- **决策**：采纳 P1 方案 A，允许空数组，语义为关闭提醒；前端实际还改 `frontend/src/components/BudgetForm.vue`、`frontend/src/types/contract.ts`、`frontend/bugtest.test.ts`，均属预算功能必要改动
+- **验证**：backend `typecheck` / `lint` 通过；`pnpm -r test` backend 33 文件 **340 例**、frontend 13 文件 75 例全通过；PR #51 CI 以 GitHub 为准
+- **人工审核**：待 Tarnishedtaffy 复审
+- **遗留问题**：#50 在 #51 合并后关闭；#38 等 #36/#37/#39/#42 关闭后单独开 `fix/m2-budget-recalc`

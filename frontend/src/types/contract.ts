@@ -202,14 +202,29 @@ export interface TransactionListResponse {
   meta: TransactionMeta;
 }
 
+export interface BudgetCategoryRef {
+  id: number;
+  name: string;
+}
+
 export interface BudgetItem {
+  id: number;
   scope: 'total' | 'category';
-  category: CategoryRef | null;
+  category: BudgetCategoryRef | null;
   amountCents: number;
   spentCents: number;
   remainingCents: number;
   usageRatio: number;
   level: BudgetLevel;
+  alertThresholds: number[];
+}
+
+export interface BudgetInput {
+  month: string;
+  scope: 'total' | 'category';
+  categoryId: number | null;
+  amountCents: number;
+  alertThresholds: number[];
 }
 
 export interface ErrorDetail {

@@ -45,6 +45,28 @@ describe('parseBatch', () => {
     }
   });
 
+  it('amount 超出安全整数分范围拒收', () => {
+    const unsafe = parseBatch(withRecord({ amount: Number.MAX_SAFE_INTEGER / 100 + 0.01 }));
+    expect(unsafe).toMatchObject({ ok: false, field: 'records[0].amount' });
+
+    const huge = parseBatch(withRecord({ amount: 1e20 }));
+    expect(huge).toMatchObject({ ok: false, field: 'records[0].amount' });
+  });
+
+  it('amount 恰好落在安全整数分边界时通过', () => {
+    const result = parseBatch(withRecord({ amount: Number.MAX_SAFE_INTEGER / 100 }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('amount 为非有限数或多位小数时拒收', () => {
+    for (const amount of [Number.POSITIVE_INFINITY, Number.NaN, 12.345]) {
+      expect(parseBatch(withRecord({ amount }))).toMatchObject({
+        ok: false,
+        field: 'records[0].amount'
+      });
+    }
+  });
+
   it('version 非 1 拒收', () => {
     const result = parseBatch({ ...baseBatch, version: 2 });
     expect(result).toMatchObject({ ok: false, field: 'version' });

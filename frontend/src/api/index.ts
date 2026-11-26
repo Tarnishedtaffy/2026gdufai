@@ -1,4 +1,5 @@
 import type {
+  BudgetInput,
   BudgetItem,
   CategoryItem,
   ImportBatch,
@@ -10,7 +11,13 @@ import type {
 } from '../types/contract';
 import { createApiError, isMockEnabled, request } from './request';
 import { nowIso } from '../utils/datetime';
-import { mockGetBudgets, mockGetCategories, mockListTransactions } from '../mock/db';
+import {
+  mockDeleteBudget,
+  mockGetBudgets,
+  mockGetCategories,
+  mockListTransactions,
+  mockPutBudget,
+} from '../mock/db';
 import { mockGetStats } from '../mock/stats';
 import { mockImportBatch } from '../mock/import';
 
@@ -81,6 +88,32 @@ export async function getBudgets(month: string): Promise<BudgetItem[]> {
   }
   const params = new URLSearchParams({ month });
   return request<BudgetItem[]>(`/api/budgets?${params.toString()}`, { expectArray: true });
+}
+
+/**
+ * 新增或幂等覆盖预算。
+ * @param input 预算写入参数
+ */
+export async function putBudget(input: BudgetInput): Promise<BudgetItem> {
+  if (isMockEnabled()) {
+    return mockPutBudget(input);
+  }
+  return request<BudgetItem>('/api/budgets', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * 删除预算；成功时后端返回 204。
+ * @param id 预算 id
+ */
+export async function deleteBudget(id: number): Promise<void> {
+  if (isMockEnabled()) {
+    mockDeleteBudget(id);
+    return;
+  }
+  await request<void>(`/api/budgets/${id}`, { method: 'DELETE' });
 }
 
 /**

@@ -251,61 +251,60 @@ export interface ReassignResult {
 }
 
 export function reassignCategory(db: Db, sourceId: number, targetId: number): ReassignResult {
-  const source = findCategory(db, sourceId);
-  if (source === null) {
-    throw categoryNotFound(sourceId);
-  }
-  const target = findCategory(db, targetId);
-  if (target === null) {
-    throw new AppError('CATEGORY_NOT_FOUND', 404, `类别 ${targetId} 不存在`, {
-      field: 'targetCategoryId'
-    });
-  }
-  if (!target.isActive) {
-    invalid('目标类别已停用', 'targetCategoryId');
-  }
-  if (source.id === target.id) {
-    return { targetCategoryId: target.id, movedTransactions: 0, movedBudgets: 0, movedRules: 0 };
-  }
+  return db.transaction(() => {
+    const source = findCategory(db, sourceId);
+    if (source === null) {
+      throw categoryNotFound(sourceId);
+    }
+    if (source.isPreset) {
+      throw new AppError('CATEGORY_PRESET_PROTECTED', 403, '预设类别不能被迁移', {
+        field: 'categoryId'
+      });
+    }
+    const target = findCategory(db, targetId);
+    if (target === null) {
+      throw new AppError('CATEGORY_NOT_FOUND', 404, `类别 ${targetId} 不存在`, {
+        field: 'targetCategoryId'
+      });
+    }
+    if (!target.isActive) {
+      invalid('目标类别已停用', 'targetCategoryId');
+    }
+    if (source.id === target.id) {
+      return { targetCategoryId: target.id, movedTransactions: 0, movedBudgets: 0, movedRules: 0 };
+    }
 
-  const mismatch = db
-    .prepare('SELECT COUNT(*) AS total FROM transactions WHERE category_id = ? AND direction <> ?')
-    .get(source.id, target.kind) as { total: number };
-  if (mismatch.total > 0) {
-    throw new AppError('CATEGORY_KIND_MISMATCH', 409, '目标类别方向与已有账单不一致', {
-      field: 'targetCategoryId'
-    });
-  }
+    const mismatch = db
+      .prepare('SELECT COUNT(*) AS total FROM transactions WHERE category_id = ? AND direction <> ?')
+      .get(source.id, target.kind) as { total: number };
+    if (mismatch.total > 0) {
+      throw new AppError('CATEGORY_KIND_MISMATCH', 409, '目标类别方向与已有账单不一致', {
+        field: 'targetCategoryId'
+      });
+    }
 
-  const conflict = db
-    .prepare(
-      `SELECT s.id AS sourceBudgetId, t.id AS targetBudgetId, s.month
-         FROM budgets s
-         JOIN budgets t ON t.user_id = s.user_id AND t.month = s.month AND t.category_id = ?
-        WHERE s.category_id = ?
-        LIMIT 1`
-    )
-    .get(target.id, source.id) as
-    | { sourceBudgetId: number; targetBudgetId: number; month: string }
-    | undefined;
-  if (conflict !== undefined) {
-    throw new AppError('BUDGET_CONFLICT', 409, '目标类别在同一月份已有预算', {
-      field: 'targetCategoryId',
-      details: {
-        sourceBudgetId: conflict.sourceBudgetId,
-        targetBudgetId: conflict.targetBudgetId,
-        month: conflict.month
-      }
-    });
-  }
+    const conflict = db
+      .prepare(
+        `SELECT s.id AS sourceBudgetId, t.id AS targetBudgetId, s.month
+           FROM budgets s
+           JOIN budgets t ON t.user_id = s.user_id AND t.month = s.month AND t.category_id = ?
+          WHERE s.category_id = ?
+          LIMIT 1`
+      )
+      .get(target.id, source.id) as
+      | { sourceBudgetId: number; targetBudgetId: number; month: string }
+      | undefined;
+    if (conflict !== undefined) {
+      throw new AppError('BUDGET_CONFLICT', 409, '目标类别在同一月份已有预算', {
+        field: 'targetCategoryId',
+        details: {
+          sourceBudgetId: conflict.sourceBudgetId,
+          targetBudgetId: conflict.targetBudgetId,
+          month: conflict.month
+        }
+      });
+    }
 
-  let result: ReassignResult = {
-    targetCategoryId: target.id,
-    movedTransactions: 0,
-    movedBudgets: 0,
-    movedRules: 0
-  };
-  db.transaction(() => {
     const transactions = db
       .prepare('UPDATE transactions SET category_id = ? WHERE category_id = ?')
       .run(target.id, source.id);
@@ -329,13 +328,12 @@ export function reassignCategory(db: Db, sourceId: number, targetId: number): Re
         db.prepare('DELETE FROM user_category_rules WHERE id = ?').run(rule.id);
       }
     }
-    result = {
+
+    return {
       targetCategoryId: target.id,
       movedTransactions: transactions.changes,
       movedBudgets: budgets.changes,
       movedRules: rules.length
     };
   })();
-
-  return result;
 }

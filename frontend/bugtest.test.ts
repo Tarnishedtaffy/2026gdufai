@@ -176,7 +176,7 @@ describe('响应形状', () => {
   });
   it('预算字段齐全', () => {
     const b = mockGetBudgets('2026-11')[0];
-    expect(Object.keys(b).sort()).toEqual(['amountCents','category','level','remainingCents','scope','spentCents','usageRatio'].sort());
+    expect(Object.keys(b).sort()).toEqual(['alertThresholds','amountCents','category','id','level','remainingCents','scope','spentCents','usageRatio'].sort());
   });
   it('错误码 5 个', async () => {
     const { HttpErrorCode } = await import('./src/types/contract').catch(() => ({ HttpErrorCode: null }));

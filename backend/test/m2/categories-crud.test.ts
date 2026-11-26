@@ -173,6 +173,12 @@ describe('类别 reassign', () => {
     expect(remaining.total).toBe(0);
   });
 
+  it('预设类别作为迁移源返回 403', async () => {
+    const result = await request('POST', '/api/categories/13/reassign', { targetCategoryId: 1 });
+    expect(result.status).toBe(403);
+    expect(result.body).toMatchObject({ error: { code: 'CATEGORY_PRESET_PROTECTED' } });
+  });
+
   it('方向不一致返回 409', async () => {
     const source = await createCategory('支出类');
     const sourceId = (source.body as { id: number }).id;

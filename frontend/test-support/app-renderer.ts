@@ -18,6 +18,7 @@ export class TestNode {
   get tagName() { return this.kind.toUpperCase(); }
   getRootNode() { return document; }
   get options(): TestNode[] { return this.children.flatMap(child => child.kind === 'option' ? [child] : child.options); }
+  getRootNode(): TestNode { return this.parent?.getRootNode() ?? this; }
   addEventListener(name: string, callback: (event: unknown) => void) { (this.listeners[name] ??= []).push(callback); }
   removeEventListener() {}
   setAttribute(name: string, value: unknown) { this.props[name] = value; }

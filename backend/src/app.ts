@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AppConfig } from './config/index.ts';
 import type { Db } from './db/client.ts';
+import { registerBudgetRoutes } from './modules/budget/routes.ts';
 import { registerLedgerRoutes } from './modules/ledger/routes.ts';
 import { AppError } from './shared/errors.ts';
 
@@ -39,6 +40,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   });
 
   void app.register(registerLedgerRoutes);
+  void app.register(registerBudgetRoutes);
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {

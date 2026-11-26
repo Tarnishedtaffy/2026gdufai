@@ -67,7 +67,7 @@ describe('PATCH /api/transactions/:id', () => {
     expect(row.amount_cents).toBe(5000);
   });
 
-  it('改到同侧类别保留 direction_source，只把 category_source 记为 manual', async () => {
+  it('改到同侧类别保留 direction_source，把 category_source 记为 manual 并清空置信度', async () => {
     const id = insertTransaction(1);
     const target = db
       .prepare("SELECT id FROM categories WHERE kind = 'expense' AND id <> 1 ORDER BY id LIMIT 1")
@@ -75,14 +75,33 @@ describe('PATCH /api/transactions/:id', () => {
     const result = await patch(id, { categoryId: target.id });
     expect(result.status).toBe(200);
     const row = db
-      .prepare('SELECT category_id, direction, direction_source, category_source FROM transactions WHERE id = ?')
-      .get(id) as { category_id: number; direction: string; direction_source: string; category_source: string };
+      .prepare(
+        'SELECT category_id, direction, direction_source, category_source, category_confidence FROM transactions WHERE id = ?'
+      )
+      .get(id) as {
+      category_id: number;
+      direction: string;
+      direction_source: string;
+      category_source: string;
+      category_confidence: number | null;
+    };
     expect(row).toEqual({
       category_id: target.id,
       direction: 'expense',
       direction_source: 'explicit',
-      category_source: 'manual'
+      category_source: 'manual',
+      category_confidence: null
     });
+  });
+
+  it('categoryId 与原类别相同时不改变来源与置信度', async () => {
+    const id = insertTransaction(1);
+    const result = await patch(id, { categoryId: 1 });
+    expect(result.status).toBe(200);
+    const row = db
+      .prepare('SELECT category_source, category_confidence FROM transactions WHERE id = ?')
+      .get(id) as { category_source: string; category_confidence: number | null };
+    expect(row).toEqual({ category_source: 'rule', category_confidence: 0.9 });
   });
 
   it('未知字段直接 422，不产生部分更新', async () => {
@@ -121,6 +140,15 @@ describe('PATCH /api/transactions/:id', () => {
       .prepare('SELECT category_id FROM user_category_rules WHERE user_id = ? AND pattern = ?')
       .get('u_001', '瑞幸咖啡') as { category_id: number } | undefined;
     expect(rule?.category_id).toBe(9);
+
+    const row = db
+      .prepare('SELECT direction_source, category_source, category_confidence FROM transactions WHERE id = ?')
+      .get(id) as {
+      direction_source: string;
+      category_source: string;
+      category_confidence: number | null;
+    };
+    expect(row).toEqual({ direction_source: 'category', category_source: 'manual', category_confidence: null });
   });
 
   it('金额非正整数返回 422', async () => {

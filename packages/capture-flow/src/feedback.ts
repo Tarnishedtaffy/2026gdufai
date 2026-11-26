@@ -20,6 +20,7 @@ export const captureFeedbackText = Object.freeze({
   ORIGINAL_NOT_FOUND_RECORDED: '没找到原账单，已归入其他或其他收入，且不计入收支。',
   ORIGINAL_AMOUNT_ADJUSTED: '原账单金额已自动调整为剩余金额。',
   REFUND_EXCESS_AS_INCOME: '原账单已自动作废，退款超出部分已计入收入。',
+  // 契约 v1.5 已将本码标记 deprecated，仅用于解释 v1.4 历史回执。
   REPAYMENT_EXCESS_AS_EXPENSE: '原贷款账单已自动作废，还款超出部分已计入支出。',
   // 契约 v1.5（#23）：长期原单、部分还款、本息不明、已结清。
   ORIGINAL_TRANSACTION_AGED: '这笔原账单较早，请确认是否对应正确。',

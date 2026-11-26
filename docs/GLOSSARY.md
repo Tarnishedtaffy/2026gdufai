@@ -106,6 +106,7 @@
 | 已用 / 剩余 | `spentCents` / `remainingCents` | 当月该范围已支出 / 剩余额度 | 「余额」 |
 | 使用率 | `usageRatio` | `spentCents ÷ amountCents` | — |
 | 预算等级 | `level` | `normal` / `near`（≥ 80%）/ `over`（≥ 100%） | 「警告/危险」 |
+| 告警阈值 | `alertThresholds` | 预算触达后写入 `budget_alerts` 的百分比阈值，去重升序；空数组表示关闭提醒 | 「提醒阈值」 |
 | 超支提醒 | budget alert | `level` 变为 `near` 或 `over` 时触发的通知（邮件 / QQ 机器人，待定） | 「预警」 |
 
 ## 8. 协作与工程
