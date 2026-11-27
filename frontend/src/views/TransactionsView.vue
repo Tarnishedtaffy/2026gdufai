@@ -15,23 +15,35 @@ const nextCursor = ref<string | null>(null);
 const hasMore = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
+let latestRequestId = 0;
 
 async function fetchList(reset = true): Promise<void> {
+  if (!reset && (loading.value || !hasMore.value || nextCursor.value === null)) return;
+
+  const requestId = ++latestRequestId;
+  const cursor = reset ? null : nextCursor.value;
+  if (reset) {
+    items.value = [];
+    nextCursor.value = null;
+    hasMore.value = false;
+  }
   loading.value = true;
   error.value = null;
   try {
     const res = await listTransactions({
-      cursor: reset ? null : nextCursor.value,
+      cursor,
       limit: 10,
       categoryId: selectedCategoryId.value,
     });
+    if (requestId !== latestRequestId) return;
     items.value = reset ? res.items : [...items.value, ...res.items];
     nextCursor.value = res.page.nextCursor;
     hasMore.value = res.page.hasMore;
   } catch (err: unknown) {
+    if (requestId !== latestRequestId) return;
     error.value = err instanceof Error ? err.message : '加载账单失败';
   } finally {
-    loading.value = false;
+    if (requestId === latestRequestId) loading.value = false;
   }
 }
 
@@ -55,7 +67,7 @@ onMounted(() => {
     </div>
 
     <LoadingSkeleton v-if="loading && items.length === 0" :rows="4" />
-    <div v-else-if="error" class="alert-error" role="alert">
+    <div v-else-if="error && items.length === 0" class="alert-error" role="alert">
       <span>{{ error }}</span>
       <button type="button" class="btn" @click="fetchList(true)">重试</button>
     </div>
@@ -71,8 +83,9 @@ onMounted(() => {
           <AmountText :cents="tx.amountCents" :direction="tx.direction" />
         </div>
       </article>
+      <p v-if="error" class="alert-error" role="alert">{{ error }}</p>
       <button v-if="hasMore" type="button" class="btn" :disabled="loading" @click="fetchList(false)">
-        {{ loading ? '加载中...' : '加载更多' }}
+        {{ loading ? '加载中...' : error ? '重试加载更多' : '加载更多' }}
       </button>
     </div>
   </section>
