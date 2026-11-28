@@ -26,9 +26,16 @@ it('单日、近七天和年度均使用契约维度，空区间与只有中性�
   expect(answerQuestion(question, {...stats,meta:{...stats.meta,isEmpty:false}})).toContain('计入收支的有 0 笔');
 });
 
-it('通过网页提交问句并向真实模式的统计客户端传递类别和月份', async () => {
+it.each([
+  { question: '2026年11月吃饭花了多少', categoryId: 1, label: '餐饮' },
+  { question: '2026年11月 Coffee Budget 花了多少', categoryId: 91, label: 'Coffee Budget' },
+])('通过网页向统计客户端传递类别和月份（$label）', async ({ question, categoryId, label }) => {
   const result = mockGetStats({dimension:'month', month:'2026-11', categoryIds:[1]});
-  const fetcher = vi.fn(async (url: string) => Response.json(url.includes('/categories') ? MOCK_CATEGORIES : result));
+  const categories = [...MOCK_CATEGORIES,
+    { ...MOCK_CATEGORIES[0], name: 'Coffee Budget', id: 91 },
+    { ...MOCK_CATEGORIES[0], name: 'CoffeeBudget', id: 92 },
+  ];
+  const fetcher = vi.fn(async (url: string) => Response.json(url.includes('/categories') ? categories : result));
   vi.stubEnv('VITE_USE_MOCK','false');
   vi.stubGlobal('fetch',fetcher);
   vi.stubGlobal('Document',class {});
@@ -36,13 +43,13 @@ it('通过网页提交问句并向真实模式的统计客户端传递类别和�
   vi.stubGlobal('document',{activeElement:null});
   const mounted = mountUi(QueryPanel,{});
   try {
-    await dispatch(findNode(mounted.root,'ledger-question'),'input','2026年11月吃饭花了多少');
+    await dispatch(findNode(mounted.root,'ledger-question'),'input',question);
     const form = allNodes(mounted.root).find(node => node.kind === 'form')!;
     await dispatch(form,'submit');
     await new Promise(resolve=>setTimeout(resolve,0));
     await nextTick();
-    expect(fetcher.mock.calls.some(([url]) => url.includes('categoryIds=1') && url.includes('month=2026-11'))).toBe(true);
-    expect(visibleText(mounted.root)).toContain('2026年11月餐饮支出为');
+    expect(fetcher.mock.calls.some(([url]) => new URLSearchParams(url.split('?')[1]).get('categoryIds') === String(categoryId) && url.includes('month=2026-11'))).toBe(true);
+    expect(visibleText(mounted.root)).toContain(`2026年11月${label}支出为`);
     expect((await getStats({dimension:'recent7'})).summary).toEqual(result.summary);
   } finally {
     mounted.unmount();
@@ -61,4 +68,33 @@ it('同名的收入和支出类别按方向选择，收支净额纳入两侧', (
   expect(parse('本月报销收入多少').query.categoryIds).toEqual([81]);
   expect(parse('本月报销净收支多少').query.categoryIds).toEqual([81, 82]);
   expect(parse('本月报销有几笔').query.categoryIds).toEqual([81, 82]);
+});
+
+it('类别包含空格时，优先匹配原名并保留问句中其他位置的空格容忍', () => {
+  const categories = [
+    { ...MOCK_CATEGORIES[0], name: 'Coffee Budget', id: 91 },
+    { ...MOCK_CATEGORIES[0], name: 'CoffeeBudget', id: 92 },
+  ];
+  expect(parseQuestion('请 问 2026 年 11 月 我的 Coffee Budget 花了多少？', categories, '2026-11-28'))
+    .toMatchObject({ query: { month: '2026-11', categoryIds: [91] }, label: '2026年11月Coffee Budget' });
+  expect(parseQuestion(' 本月 CoffeeBudget 花了多少 ', categories, '2026-11-28').query.categoryIds).toEqual([92]);
+});
+
+it('精确匹配以“的”结尾的类别，也能识别类别后作为语法助词的“的”', () => {
+  const categories = [
+    { ...MOCK_CATEGORIES[0], name: '家用的', id: 93 },
+    { ...MOCK_CATEGORIES[0], name: '旅行', id: 94 },
+  ];
+  expect(parseQuestion('本月家用的花了多少', categories, '2026-11-28').query.categoryIds).toEqual([93]);
+  expect(parseQuestion('本月旅行的支出多少', categories, '2026-11-28').query.categoryIds).toEqual([94]);
+});
+
+it('忽略多余空格时遇到多个不同类别，提示按原名输入', () => {
+  const categories = [
+    { ...MOCK_CATEGORIES[0], name: '出行 费用', id: 95 },
+    { ...MOCK_CATEGORIES[0], name: '出 行费用', id: 96 },
+  ];
+  const parse = (q: string) => parseQuestion(q, categories, '2026-11-28');
+  expect(() => parse('本月出行费用花了多少')).toThrow('按类别原名');
+  expect(parse('本月出行 费用花了多少').query.categoryIds).toEqual([95]);
 });

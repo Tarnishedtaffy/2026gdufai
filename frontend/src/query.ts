@@ -4,7 +4,7 @@ import { formatCents } from './utils/money';
 type Metric = 'expense' | 'income' | 'net' | 'top' | 'count';
 interface Question { query: StatsQuery; metric: Metric; label: string }
 
-const aliases: Record<string, string> = { 吃饭: '餐饮', 打车: '交通', 坐车: '交通', 看病: '医疗' };
+const ALIASES: Record<string, string> = { 吃饭: '餐饮', 打车: '交通', 坐车: '交通', 看病: '医疗' };
 const intents: [RegExp, Metric][] = [
   [/^(?:哪类花得最多|哪一类支出最多|最大支出类别)$/, 'top'],
   [/(?:项目收支净额|收支净额|净收支)(?:是多少|多少)?$/, 'net'],
@@ -28,22 +28,50 @@ function period(word: string, today: string): StatsQuery {
   return { dimension: 'month', month: today.slice(0, 7) };
 }
 
+/** 从原问句取回压缩语法时略过的类别名内空格。 */
+function originalCategoryName(text: string, subject: string, compactLength: number): string {
+  if (!compactLength) return '';
+  const positions = Array.from(text.matchAll(/\S/g), match => match.index!);
+  const start = positions.length - subject.length;
+  return text.slice(positions[start], positions[start + compactLength - 1]! + 1);
+}
+
+function findNamedCategories(name: string, categories: readonly CategoryItem[]): CategoryItem[] {
+  if (!name) return [];
+  const withoutParticle = name.replace(/\s*的$/, '');
+  const names = new Set([name, withoutParticle]);
+  for (const candidate of names) {
+    const exact = categories.filter(category => category.name === candidate);
+    if (exact.length) return exact;
+  }
+  for (const candidate of names) {
+    const compact = candidate.replace(/\s+/g, '');
+    const matches = categories.filter(category => category.name.replace(/\s+/g, '') === compact);
+    if (matches.length) return matches;
+  }
+  const alias = ALIASES[withoutParticle.replace(/\s+/g, '')];
+  return categories.filter(category => category.name === alias);
+}
+
 /** 解析时间标签和类别字典，只向统计服务传参数。 */
 export function parseQuestion(question: string, categories: readonly CategoryItem[], today: string): Question {
-  const input = question.trim().replace(/\s+/g, '').replace(/[？?。]+$/, '').replace(/^(?:请问|帮我查一下)/, '');
+  const original = question.replace(/[？?。\s]+$/, '');
+  const input = original.replace(/\s+/g, '').replace(/^(?:请问|帮我查一下)/, '');
   const match = /^(今天|本月|这个月|这月|上个月|上月|今年|去年|(?:最近|近)[7七]天|\d{4}年\d{1,2}月)(?:我(?:的)?)?(.+)$/.exec(input);
   if (!match) throw new Error('请指定一个时间，例如“上个月吃饭花了多少”或“近七天哪类花得最多”。');
   const [, time, subject] = match;
   const found = intents.find(([pattern]) => pattern.test(subject));
   if (!found) throw new Error('可以查支出、收入、净收支、笔数或支出最多的类别，请换个问法。');
   const [pattern, metric] = found;
-  const name = subject.replace(pattern, '').replace(/的$/, '');
+  const name = originalCategoryName(original, subject, subject.replace(pattern, '').length);
   const direction = metric === 'top' ? 'expense' : metric === 'expense' || metric === 'income' ? metric : 'all';
-  const exactMatches = name ? categories.filter(category => category.name === name) : [];
-  const matches = exactMatches.length ? exactMatches : categories.filter(category => category.name === aliases[name]);
+  const matches = findNamedCategories(name, categories);
   if (name && !matches.length) throw new Error(`类别列表中没有“${name}”，请核对类别名称。`);
   const selected = matches.filter(category => direction === 'all' || category.kind === direction);
   if (matches.length && !selected.length) throw new Error('这个类别与所问的收支方向不符，请核对。');
+  if (new Set(selected.map(category => category.name)).size > 1) {
+    throw new Error(`“${name}”与多个类别相似，请按类别原名输入。`);
+  }
   const categoryIds = selected.length ? selected.map(category => category.id) : undefined;
   return {
     metric,
