@@ -98,3 +98,8 @@ it('忽略多余空格时遇到多个不同类别，提示按原名输入', () =
   expect(() => parse('本月出行费用花了多少')).toThrow('按类别原名');
   expect(parse('本月出行 费用花了多少').query.categoryIds).toEqual([95]);
 });
+
+it('仅有语法助词时，查询整段周期的收支合计', () => {
+  const plan = parseQuestion('本月的支出多少？', MOCK_CATEGORIES, '2026-11-28');
+  expect(plan.query).toEqual({ dimension: 'month', month: '2026-11', direction: 'expense' });
+});

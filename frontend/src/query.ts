@@ -66,7 +66,7 @@ export function parseQuestion(question: string, categories: readonly CategoryIte
   const name = originalCategoryName(original, subject, subject.replace(pattern, '').length);
   const direction = metric === 'top' ? 'expense' : metric === 'expense' || metric === 'income' ? metric : 'all';
   const matches = findNamedCategories(name, categories);
-  if (name && !matches.length) throw new Error(`类别列表中没有“${name}”，请核对类别名称。`);
+  if (name && name !== '的' && !matches.length) throw new Error(`类别列表中没有“${name}”，请核对类别名称。`);
   const selected = matches.filter(category => direction === 'all' || category.kind === direction);
   if (matches.length && !selected.length) throw new Error('这个类别与所问的收支方向不符，请核对。');
   if (new Set(selected.map(category => category.name)).size > 1) {
