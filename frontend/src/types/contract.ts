@@ -238,6 +238,7 @@ export interface ApiErrorBody {
 }
 
 export interface StatsQuery {
+  categoryIds?: number[];
   dimension: StatsDimension;
   direction?: StatsDirection;
   date?: string;

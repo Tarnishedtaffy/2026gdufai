@@ -59,12 +59,13 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
       ? recent7Keys(DEMO_TODAY)
       : [query.month ?? query.date ?? query.year ?? DEMO_TODAY.slice(0, 7)];
 
-  const allTransactions = getMockTransactions();
+  const allTransactions = getMockTransactions().filter(tx => !query.categoryIds?.length || (tx.category && query.categoryIds.includes(tx.category.id)));
   const buckets: StatsBucket[] = [];
   const overallCatMap = new Map<number, TopCategory>();
   let totalExpenseCents = 0;
   let totalIncomeCents = 0;
   let totalCount = 0;
+  let hasRecords = false;
 
   for (const period of keys) {
     let bucketExp = 0;
@@ -74,9 +75,11 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
 
     for (const tx of allTransactions) {
       const txKey = query.dimension === 'recent7' ? toDateKey(tx.occurredAt) : tx.occurredAt.slice(0, period.length);
-      if (txKey !== period) {
+      if (txKey !== period || tx.status !== 'confirmed' || (direction !== 'all' && tx.direction !== direction)) {
         continue;
       }
+      hasRecords = true;
+      if ('entryType' in tx && tx.entryType && tx.entryType !== 'normal') continue;
       bucketCount += 1;
       if (tx.direction === 'expense') bucketExp += tx.amountCents;
       if (tx.direction === 'income') bucketInc += tx.amountCents;
@@ -139,7 +142,7 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
       unit: 'cent',
       basis: { dateField: 'occurred_date', timezone: 'Asia/Shanghai', includeVoid: false },
       generatedAt: nowIso(),
-      isEmpty: totalCount === 0,
+      isEmpty: !hasRecords,
     },
   };
 }
