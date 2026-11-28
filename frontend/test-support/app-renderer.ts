@@ -1,3 +1,5 @@
+import { vi } from 'vitest';
+import { mockGetStats } from '../src/mock/stats';
 import { createRenderer, defineComponent, h, nextTick, shallowRef } from 'vue';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { CaptureDraft } from '@gduf/capture-flow';
@@ -79,4 +81,14 @@ export function mountUi(component: Parameters<typeof renderer.createApp>[0], pro
   const app = renderer.createApp(component, props), root = new TestNode('root');
   app.mount(root);
   return { root, unmount: () => app.unmount() };
+}
+
+/** 记账提交流程测试将首页进度读请求与导入请求分开。 */
+export function stubCaptureFetch(client: typeof fetch) {
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes('/api/stats?')) {
+      return Promise.resolve(Response.json(mockGetStats({ dimension: 'recent7', direction: 'all' })));
+    }
+    return client(input, init);
+  });
 }

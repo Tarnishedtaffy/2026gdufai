@@ -7,6 +7,7 @@ import { parseDateTime } from '../utils/datetime';
 import { yuanToCents, centsToYuanNumber } from '../utils/money';
 import CaptureDraftCard from '../components/capture/CaptureDraftCard.vue';
 import CaptureAttachmentEntry from '../components/capture/CaptureAttachmentEntry.vue';
+import RecordingTree from '../components/capture/RecordingTree.vue';
 
 const { snapshot, inputError, canPrepare, prepare, update, confirm, discard } = useCaptureFlow();
 const showEntry = ref(snapshot.value.phase === 'empty');
@@ -22,6 +23,11 @@ const discardAcknowledged = ref(false);
 const busy = computed(() => snapshot.value.phase === 'submitting');
 const retrying = computed(() => snapshot.value.phase === 'retry');
 const pendingCount = computed(() => snapshot.value.records.filter(row => !row.result || row.result.status === 'pending_followup').length);
+const recordedBatchId = computed(() => {
+  const { phase, batchId, records } = snapshot.value;
+  if (phase !== 'complete' && phase !== 'pending_followup') return null;
+  return records.some(row => row.result?.status === 'confirmed' || row.result?.status === 'duplicate') ? batchId : null;
+});
 const isMock = isMockEnabled();
 watch(() => snapshot.value.phase, () => { discardRequested.value = false; discardAcknowledged.value = false; });
 
@@ -127,6 +133,7 @@ defineExpose({ acceptDrafts });
       </div>
     </template>
     <p v-if="inputError" class="alert" role="alert">{{ inputError }}</p>
+    <RecordingTree :recorded-batch-id="recordedBatchId" />
   </section>
 </template>
 

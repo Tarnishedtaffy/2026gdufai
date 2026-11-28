@@ -57,6 +57,12 @@ export async function getStats(query: StatsQuery): Promise<StatsResponse> {
   return request<StatsResponse>(`/api/stats?${params.toString()}`);
 }
 
+/** 首页记账树按发生日使用最近七天的有效账单统计。 */
+export function getRecordingWeek(): Promise<StatsResponse> {
+  const query = { dimension: 'recent7', direction: 'all' } as const;
+  return isMockEnabled() ? Promise.resolve(mockGetStats(query, nowIso().slice(0, 10))) : getStats(query);
+}
+
 /**
  * 按游标分页查询账单明细列表（严禁传 page/offset）。
  * @param query 筛选与游标参数

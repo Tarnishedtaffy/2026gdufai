@@ -1,13 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { parseCaptureEdit } from './src/components/capture/capture-form';
 import { parseDateTime } from './src/utils/datetime';
-import { allNodes, dispatch, findNode, mountCaptureApp, visibleText } from './test-support/app-renderer';
+import { stubCaptureFetch, allNodes, dispatch, findNode, mountCaptureApp, visibleText } from './test-support/app-renderer';
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 it('手工入口与草稿卡片对非法日历给出相同错误，不把坏时间改为 null 后提交', async () => {
   vi.stubEnv('VITE_USE_MOCK', 'false'); vi.stubGlobal('document', { activeElement: null });
-  const client = vi.fn(); vi.stubGlobal('fetch', client);
+  const client = vi.fn(); stubCaptureFetch(client);
   const app = await mountCaptureApp();
   try {
     await dispatch(findNode(app.root, 'cap-raw'), 'input', '虚构日期核对消费');
