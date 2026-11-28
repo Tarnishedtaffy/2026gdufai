@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { mountCaptureApp, allNodes, dispatch, findNode, visibleText } from './test-support/app-renderer';
+import { stubCaptureFetch, mountCaptureApp, allNodes, dispatch, findNode, visibleText } from './test-support/app-renderer';
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
@@ -7,7 +7,7 @@ it('未决提交仅在明确确认后放弃本地草稿，提示先核对账单�
   vi.stubEnv('VITE_USE_MOCK', 'false'); vi.stubGlobal('document', { activeElement: null });
   let finish!: (response: Response) => void;
   const client = vi.fn((_url: string | URL | Request, _init?: RequestInit) => new Promise<Response>(resolve => { finish = resolve; }));
-  vi.stubGlobal('fetch', client);
+  stubCaptureFetch(client);
   const app = await mountCaptureApp();
   const button = (text: string) => allNodes(app.root).find(node => node.kind === 'button' && visibleText(node).trim() === text)!;
   try {

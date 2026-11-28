@@ -52,11 +52,11 @@ function buildBucketCategories(bucketTxs: TransactionItem[], totalDirCents: numb
  * 模拟按维度聚合统计，对齐契约 range/summary/buckets/meta 全部字段。
  * @param query 统计请求参数
  */
-export function mockGetStats(query: StatsQuery): StatsResponse {
+export function mockGetStats(query: StatsQuery, recentAnchor = DEMO_TODAY): StatsResponse {
   const direction = query.direction ?? 'expense';
   const keys =
     query.dimension === 'recent7'
-      ? recent7Keys(DEMO_TODAY)
+      ? recent7Keys(recentAnchor)
       : [query.month ?? query.date ?? query.year ?? DEMO_TODAY.slice(0, 7)];
 
   const allTransactions = getMockTransactions();
@@ -65,6 +65,7 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
   let totalExpenseCents = 0;
   let totalIncomeCents = 0;
   let totalCount = 0;
+  let hasRecords = false;
 
   for (const period of keys) {
     let bucketExp = 0;
@@ -74,9 +75,11 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
 
     for (const tx of allTransactions) {
       const txKey = query.dimension === 'recent7' ? toDateKey(tx.occurredAt) : tx.occurredAt.slice(0, period.length);
-      if (txKey !== period) {
+      if (txKey !== period || tx.status !== 'confirmed') {
         continue;
       }
+      hasRecords = true;
+      if ((tx.entryType ?? 'normal') !== 'normal') continue;
       bucketCount += 1;
       if (tx.direction === 'expense') bucketExp += tx.amountCents;
       if (tx.direction === 'income') bucketInc += tx.amountCents;
@@ -139,7 +142,7 @@ export function mockGetStats(query: StatsQuery): StatsResponse {
       unit: 'cent',
       basis: { dateField: 'occurred_date', timezone: 'Asia/Shanghai', includeVoid: false },
       generatedAt: nowIso(),
-      isEmpty: totalCount === 0,
+      isEmpty: !hasRecords,
     },
   };
 }

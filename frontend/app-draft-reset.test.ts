@@ -1,12 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
-import { allNodes, dispatch, findNode, mountCaptureApp, visibleText } from './test-support/app-renderer';
+import { stubCaptureFetch, allNodes, dispatch, findNode, mountCaptureApp, visibleText } from './test-support/app-renderer';
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 it('未提交草稿重新填写会清除共享状态，切页返回后旧草稿不会复现，且始终零请求', async () => {
   vi.stubEnv('VITE_USE_MOCK', 'false'); vi.stubGlobal('document', { activeElement: null });
-  const client = vi.fn(); vi.stubGlobal('fetch', client);
+  const client = vi.fn(); stubCaptureFetch(client);
   const app = await mountCaptureApp();
   try {
     await dispatch(findNode(app.root, 'cap-raw'), 'input', '虚构旧草稿：不应再次出现');
@@ -30,7 +30,7 @@ it('旧重新填写事件在提交中和 retry 时均不能绕过本地放弃二
   vi.stubEnv('VITE_USE_MOCK', 'false'); vi.stubGlobal('document', { activeElement: null });
   let finish!: (value: Response) => void;
   const client = vi.fn(() => new Promise<Response>(resolve => { finish = resolve; }));
-  vi.stubGlobal('fetch', client);
+  stubCaptureFetch(client);
   const app = await mountCaptureApp();
   let pending: Promise<void> | undefined;
   try {

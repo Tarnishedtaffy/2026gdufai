@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import type { ImportBatch } from '@gduf/capture-flow';
-import { mountCaptureApp, allNodes, dispatch, visibleText } from './test-support/app-renderer';
+import { stubCaptureFetch, mountCaptureApp, allNodes, dispatch, visibleText } from './test-support/app-renderer';
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
@@ -18,7 +18,7 @@ it('数组状态回执不显示已入库，用户重试保持原载荷且可恢�
       direction: 'expense', occurredAt: record.occurredAt, confidence: null, feedback: [],
     })) });
   });
-  vi.stubGlobal('fetch', client);
+  stubCaptureFetch(client);
   const app = await mountCaptureApp();
   const button = (text: string) => allNodes(app.root)
     .find(node => node.kind === 'button' && visibleText(node).includes(text))!;

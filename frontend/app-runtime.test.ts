@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import type { ImportBatch } from '@gduf/capture-flow';
-import { mountCaptureApp, visibleText, allNodes, dispatch, findNode } from './test-support/app-renderer';
+import { stubCaptureFetch, mountCaptureApp, visibleText, allNodes, dispatch, findNode } from './test-support/app-renderer';
 import { getCategories } from './src/api/index';
 import { getAccessToken, setAccessToken } from './src/api/access-token';
 
@@ -24,7 +24,7 @@ it('API stub 验证 App 身份、401 令牌修正后原批次重试及图片/语
       direction: record.direction, occurredAt: record.occurredAt, category: null, confidence: null, feedback: [],
     })) });
   });
-  vi.stubGlobal('fetch', client);
+  stubCaptureFetch(client);
   const mounted = await mountCaptureApp();
   try {
     const attachment = findNode(mounted.root, 'cap-file');
