@@ -689,3 +689,36 @@ ejected；
 - **验证**：backend `typecheck` / `lint` 通过；`pnpm -r test` backend 33 文件 **340 例**、frontend 13 文件 75 例全通过；PR #51 CI 以 GitHub 为准
 - **人工审核**：待 Tarnishedtaffy 复审
 - **遗留问题**：#50 在 #51 合并后关闭；#38 等 #36/#37/#39/#42 关闭后单独开 `fix/m2-budget-recalc`
+
+### LOG-Z_Wen-20261123-03
+
+- **时间**：2026-11-23 21:50（+08:00）
+- **工具/模型**：DeepSeek Harness / deepseek-flash
+- **模块 / 分支 / PR**：M2 + M4 / `fix/m2-budget-recalc` / #38
+- **任务**：补齐预算告警在 M2 全部写路径上的重算，完成 #38
+- **关键提示词**：用户「完成#38」；#38 要求覆盖导入、PATCH、void、类别 reassign
+- **代理做了什么**：
+  - `backend/src/modules/budget/service.ts` 新增 `recalcBudgetsForMonthAll`（整月全部预算）与 `recalcBudgetsForCategory`（按目标类别涉及月份）
+  - `backend/src/modules/ledger/routes.ts`：导入成功后按 confirmed 记录的 `occurredAt` 月份逐月调用整月重算；类别 reassign 成功后调用类别重算
+  - `backend/src/modules/ledger/transaction-edit.ts`：PATCH 按旧/新日期与旧/新类别调用 `recalcBudgetForTransaction`；void 在作废事务内重算
+  - 新增 `backend/test/m4/budget-recalc.test.ts` 7 例：导入跨 80/100、PATCH 金额、PATCH 类别、跨 kind、改月份、void、reassign
+- **决策**：导入按整月全部预算重算，避免只按 `RecordResult` 类别漏掉退款/还款中性记录或利息记录；PATCH 同时照顾旧、新月份与类别；reassign 在事务提交后按目标类别重算；不改表、不改契约
+- **验证**：`pnpm -r typecheck` 全绿；`pnpm -r test` backend 34 文件 **352 例**、frontend 14 文件 **78 例**全通过；`pnpm -r lint` 通过；`git diff --check` 无输出
+- **人工审核**：待 PR 复审
+- **遗留问题**：无
+
+### LOG-Z_Wen-20261124-01
+
+- **时间**：2026-11-24 18:55（+08:00）
+- **工具/模型**：DeepSeek Harness / deepseek-flash
+- **模块 / 分支 / PR**：M2 + M4 / `fix/m2-budget-recalc` / #54
+- **任务**：处理 PR #54 的新 review：补还款+利息导入用例；确认 PR 模板与 `Closes #38` 已填写
+- **关键提示词**：reviewer 结论「代码正确，合并前请补 PR 模板」；可选建议补还款+利息导入用例
+- **代理做了什么**：
+  - `backend/test/m4/budget-recalc.test.ts` 新增「导入还款与利息后只把利息计入支出预算」用例，验证混合还款的本金中性记录不计支出、利息类别 13 计入预算并触发 80/100 告警
+  - 复核 PR #54 正文已含「改动说明 / 模块与影响范围 / 验证 / AI 辅助记录 / 安全自查」五节和 `Closes #38`，重新 PUT 正文以排除页面缓存
+  - 在 PR #54 回复 reviewer，说明分支实际为 `fix/m2-budget-recalc`、正文已填写，并说明 README 账号名与 GitHub 账号不一致属团队命名问题，未擅自改共享 README/日志文件名
+- **决策**：采纳可选测试建议；模板与 `Closes #38` 已在正文，不重复改代码；账号命名不在本 PR 范围
+- **验证**：`pnpm -r typecheck` 全绿；`pnpm -r test` backend 34 文件 **353 例**、frontend 14 文件 **78 例**全通过；`pnpm -r lint` 通过；`git diff --check` 无输出
+- **人工审核**：待 Tarnishedtaffy 复审
+- **遗留问题**：PR #54 合并后 #38 自动关闭

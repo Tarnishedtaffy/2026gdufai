@@ -1,6 +1,7 @@
 import type { Db } from '../../db/client.ts';
 import { AppError } from '../../shared/errors.ts';
 import { nowIsoShanghai, toShanghaiDate } from '../../shared/time.ts';
+import { recalcBudgetForTransaction } from '../budget/service.ts';
 
 const ISO_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/;
@@ -120,6 +121,7 @@ export function patchTransaction(
   let merchant = current.merchant;
   let occurredAt = current.occurred_at;
   let changedCategory = false;
+  let changedAmount = false;
   let changedOccurredAt = false;
 
   if (input.categoryId !== undefined) {
@@ -144,6 +146,7 @@ export function patchTransaction(
       invalid('amountCents 必须是正整数', 'amountCents');
     }
     amountCents = input.amountCents as number;
+    changedAmount = amountCents !== current.amount_cents;
   }
 
   if (input.merchant !== undefined) {
@@ -208,6 +211,13 @@ export function patchTransaction(
            last_used_at = excluded.last_used_at`
       ).run(userId, merchant.trim(), categoryId, now);
     }
+
+    if (changedAmount || changedCategory || changedOccurredAt) {
+      recalcBudgetForTransaction(db, userId, toShanghaiDate(current.occurred_at), current.category_id);
+      if (changedCategory || changedOccurredAt) {
+        recalcBudgetForTransaction(db, userId, toShanghaiDate(occurredAt), categoryId);
+      }
+    }
   })();
 
   const row = db
@@ -259,9 +269,12 @@ export function voidTransactionById(db: Db, id: string, userId: string): { id: s
     invalid('中性记录不允许直接作废', 'entryType');
   }
   if (current.status !== 'void') {
-    db.prepare(
-      "UPDATE transactions SET status = 'void', updated_at = ? WHERE id = ? AND user_id = ?"
-    ).run(nowIsoShanghai(), id, userId);
+    db.transaction(() => {
+      db.prepare(
+        "UPDATE transactions SET status = 'void', updated_at = ? WHERE id = ? AND user_id = ?"
+      ).run(nowIsoShanghai(), id, userId);
+      recalcBudgetForTransaction(db, userId, toShanghaiDate(current.occurred_at), current.category_id);
+    })();
   }
   return { id, status: 'void' };
 }

@@ -280,7 +280,7 @@ export function removeBudget(db: Db, userId: string, idValue: unknown): void {
 
 /**
  * 账单新增/修改/作废后重算受影响预算的告警。
- * 只补写新触发的告警，不回收已触发记录；由 M2 在写事务提交后调用。
+ * 只补写新触发的告警，不回收已触发记录；由 M2 在写事务内或提交后调用。
  */
 export function recalcBudgetForTransaction(
   db: Db,
@@ -320,5 +320,36 @@ export function recalcBudgetsForMonth(
   for (const row of rows) {
     const spentCents = sumSpentCents(db, userId, range.start, range.end, row.category_id);
     triggerAlerts(db, row.id, row.amount_cents, spentCents, readStoredThresholds(row.alert_thresholds), now);
+  }
+}
+
+/**
+ * 重算某月全部预算的告警。
+ * 用于批量导入：一条批次可能同时产生普通账单、退款/还款和利息记录，
+ * 仅凭 RecordResult 无法完整枚举所有受影响类别，按整月重算更稳妥。
+ */
+export function recalcBudgetsForMonthAll(db: Db, userId: string, monthValue: unknown): void {
+  const { month } = parseMonth(monthValue);
+  const rows = listBudgetRows(db, userId, month);
+  if (rows.length === 0) {
+    return;
+  }
+  const categoryIds = [
+    ...new Set(rows.map((row) => row.category_id).filter((id): id is number => id !== null))
+  ];
+  recalcBudgetsForMonth(db, userId, month, categoryIds);
+}
+
+/** 类别迁移后按目标类别涉及的月份重算告警。 */
+export function recalcBudgetsForCategory(db: Db, userId: string, categoryId: number): void {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT substr(occurred_date, 1, 7) AS month
+         FROM transactions
+        WHERE user_id = ? AND category_id = ?`
+    )
+    .all(userId, categoryId) as Array<{ month: string }>;
+  for (const row of rows) {
+    recalcBudgetsForMonthAll(db, userId, row.month);
   }
 }
